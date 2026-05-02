@@ -1,0 +1,140 @@
+:root {
+  --primary-color: #4a69e2;
+  --secondary-color: #ffa500;
+  --background-color: #f7f8fa;
+  --card-background-color: #ffffff;
+  --text-color: #1d2330;
+  --light-text-color: #6c757d;
+  --border-color: #e9ecef;
+  --font-family-headings: "Poppins", sans-serif;
+  --font-family-body: "Roboto", sans-serif;
+}
+
+html[data-theme="dark"] {
+  --primary-color: #4a69e2;
+  --secondary-color: #ffa500;
+  --background-color: #121212;
+  --card-background-color: #1e1e1e;
+  --text-color: #eaeaea;
+  --light-text-color: #adb5bd;
+  --border-color: #343a40;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-family-body);
+  background-color: var(--background-color);
+  color: var(--text-color);
+  margin: 0;
+  padding: 0;
+  transition:
+    background-color 0.3s,
+    color 0.3s;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  display: block;
+}
+
+.main-content {
+  flex: 0 0 auto;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-family-headings);
+  font-weight: 600;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 15px;
+}
+
+.btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  font-family: var(--font-family-body);
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-primary {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(74, 105, 226, 0.3);
+}
+
+.card {
+  background-color: var(--card-background-color);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 25px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+  border: 1px solid var(--border-color);
+}
+
+.card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+}
+
+/* Утилиты */
+.text-center {
+  text-align: center;
+}
+
+.mb-4 {
+  margin-bottom: 1.5rem;
+}
+
+/* Анимации при скролле */
+.fade-in {
+  opacity: 0;
+  transform: translateY(30px);
+  transition:
+    opacity 0.6s ease-out,
+    transform 0.6s ease-out;
+}
+
+.fade-in.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.mb-4 {
+  margin-bottom: 1.5rem;
+}
+
+/* Анимации при скролле */
+.fade-in {
+  opacity: 0;
+  transform: translateY(30px);
+  transition:
+    opacity 0.6s ease-out,
+    transform 0.6s ease-out;
+}
+
+.fade-in.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
