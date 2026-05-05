@@ -2,11 +2,7 @@
   <div
     style="
       min-height: calc(100vh - 140px);
-      background: linear-gradient(
-        135deg,
-        rgba(74, 105, 226, 0.08) 0%,
-        rgba(255, 165, 0, 0.05) 100%
-      );
+      background-color: var(--background-color);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -26,7 +22,7 @@
     >
       <h1
         style="
-          font-family: 'Poppins', sans-serif;
+          font-family: &quot;Poppins&quot;, sans-serif;
           font-size: 2rem;
           font-weight: 700;
           color: var(--text-color);
@@ -38,7 +34,7 @@
       </h1>
       <p
         style="
-          font-family: 'Roboto', sans-serif;
+          font-family: &quot;Roboto&quot;, sans-serif;
           color: var(--light-text-color);
           text-align: center;
           margin: 0 0 30px 0;
@@ -57,7 +53,7 @@
           <label
             style="
               display: block;
-              font-family: 'Roboto', sans-serif;
+              font-family: &quot;Roboto&quot;, sans-serif;
               font-size: 0.85rem;
               font-weight: 500;
               color: var(--text-color);
@@ -79,7 +75,7 @@
           <label
             style="
               display: block;
-              font-family: 'Roboto', sans-serif;
+              font-family: &quot;Roboto&quot;, sans-serif;
               font-size: 0.85rem;
               font-weight: 500;
               color: var(--text-color);
@@ -101,7 +97,7 @@
           <label
             style="
               display: block;
-              font-family: 'Roboto', sans-serif;
+              font-family: &quot;Roboto&quot;, sans-serif;
               font-size: 0.85rem;
               font-weight: 500;
               color: var(--text-color);
@@ -123,7 +119,7 @@
           <label
             style="
               display: block;
-              font-family: 'Roboto', sans-serif;
+              font-family: &quot;Roboto&quot;, sans-serif;
               font-size: 0.85rem;
               font-weight: 500;
               color: var(--text-color);
@@ -132,12 +128,14 @@
           >
             🔐 Пароль
           </label>
-          <input
-            v-model="password"
-            type="password"
-            placeholder="Минимум 6 символов"
-            class="auth-input"
-          />
+          <div class="password-field" :data-password-tip="PASSWORD_HINT">
+            <input
+              v-model="password"
+              type="password"
+              placeholder="Минимум 6 символов"
+              class="auth-input"
+            />
+          </div>
         </div>
 
         <!-- Кнопка регистрации -->
@@ -149,7 +147,7 @@
         style="
           text-align: center;
           margin-top: 20px;
-          font-family: 'Roboto', sans-serif;
+          font-family: &quot;Roboto&quot;, sans-serif;
           color: var(--light-text-color);
           font-size: 0.9rem;
         "
@@ -166,6 +164,7 @@ import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "../stores/authStore";
 import { showToast } from "../services/notificationService";
+import { PASSWORD_HINT, validatePassword } from "../services/passwordService";
 
 const firstName = ref("");
 const lastName = ref("");
@@ -191,8 +190,9 @@ function register() {
     return;
   }
 
-  if (passwordValue.length < 6) {
-    showToast("Пароль должен быть не короче 6 символов");
+  const passwordError = validatePassword(passwordValue);
+  if (passwordError) {
+    showToast(passwordError);
     return;
   }
 
@@ -200,7 +200,7 @@ function register() {
     firstNameValue,
     lastNameValue,
     emailValue,
-    passwordValue
+    passwordValue,
   );
   if (!success) {
     showToast("Пользователь с таким email уже зарегистрирован");

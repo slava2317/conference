@@ -1,9 +1,16 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
+import { useRoute } from "vue-router";
 import { useConferenceStore } from "../stores/conferenceStore";
 import { useAuthStore } from "../stores/authStore";
 import { useFileStore } from "../stores/fileStore";
 import { showToast } from "../services/notificationService";
+import {
+  readFileAsDataURL,
+  validateSpeakerPhotoFile,
+} from "../services/speakerPhotoService";
+import { downloadStoredFile } from "../services/fileContentService";
+import { getAnyFileByName, getFileByName } from "../services/fileService";
 import SelectDropdown from "../components/SelectDropdown.vue";
 import {
   CONFERENCE_TOPICS,
@@ -13,11 +20,19 @@ import {
 const conferenceStore = useConferenceStore();
 const auth = useAuthStore();
 const fileStore = useFileStore();
+const route = useRoute();
 
 const conferences = computed(() => conferenceStore.getConferences());
 const selectedConference = ref(null);
 const isEditing = ref(false);
-const filterTopic = ref("all");
+
+function normalizeTopicFilter(topic) {
+  return CONFERENCE_TOPICS_ARRAY.some((item) => item.value === topic)
+    ? topic
+    : "all";
+}
+
+const filterTopic = ref(normalizeTopicFilter(route.query.topic));
 const selectedEditFileNames = ref([]);
 const editForm = ref(createEmptyEditForm());
 const currentTime = ref(new Date());
@@ -29,6 +44,13 @@ const filterOptions = [
   ...CONFERENCE_TOPICS_ARRAY,
 ];
 const availableFiles = computed(() => fileStore.files || []);
+
+watch(
+  () => route.query.topic,
+  (topic) => {
+    filterTopic.value = normalizeTopicFilter(topic);
+  },
+);
 
 function getCurrentUserEmail() {
   return typeof auth.user === "string" ? auth.user : auth.user?.email || "";
@@ -241,15 +263,24 @@ function toggleEditFileSelection(fileName) {
   selectedEditFileNames.value = [...selectedEditFileNames.value, fileName];
 }
 
-function handleEditSpeakerPhotoUpload(event) {
+async function handleEditSpeakerPhotoUpload(event) {
   const file = event.target.files?.[0];
   if (!file) return;
 
-  const reader = new FileReader();
-  reader.onload = () => {
-    editForm.value.speaker.photo = reader.result;
-  };
-  reader.readAsDataURL(file);
+  const photoError = validateSpeakerPhotoFile(file);
+  if (photoError) {
+    showToast(photoError);
+    event.target.value = "";
+    return;
+  }
+
+  try {
+    editForm.value.speaker.photo = await readFileAsDataURL(file);
+  } catch (error) {
+    console.error(error);
+    showToast("Не удалось загрузить фото спикера");
+    event.target.value = "";
+  }
 }
 
 function openConference(conference) {
@@ -324,8 +355,27 @@ function saveConferenceChanges() {
     speaker: { ...currentEditForm.speaker },
     usedFiles: availableFiles.value
       .filter((file) => selectedEditFileNames.value.includes(file.name))
-      .map((file) => ({ name: file.name, size: file.size, date: file.date })),
+      .map((file) => ({
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        date: file.date,
+        contentId: file.contentId,
+        sourceUserEmail:
+          file.sourceUserEmail ||
+          (typeof auth.user === "string" ? auth.user : auth.user?.email || ""),
+      })),
   };
+
+  const missingContentFile = updatedConference.usedFiles.find(
+    (file) => !file.contentId && !file.content,
+  );
+  if (missingContentFile) {
+    showToast(
+      `Файл «${missingContentFile.name}» был загружен раньше и не содержит данных для скачивания. Перезагрузите его в разделе «Материалы».`,
+    );
+    return;
+  }
 
   conferenceStore.updateConference(
     selectedConference.value.id,
@@ -337,6 +387,21 @@ function saveConferenceChanges() {
   selectedConference.value = selectedConference.value || updatedConference;
   isEditing.value = false;
   showToast("Конференция обновлена");
+}
+
+async function downloadConferenceFile(file) {
+  if (await downloadStoredFile(file)) {
+    return;
+  }
+
+  const fallbackFile = file?.sourceUserEmail
+    ? getFileByName(file.sourceUserEmail, file.name)
+    : getAnyFileByName(file.name);
+  if (await downloadStoredFile(fallbackFile)) {
+    return;
+  }
+
+  showToast("Файл недоступен для скачивания");
 }
 </script>
 
@@ -491,10 +556,16 @@ function saveConferenceChanges() {
               :key="file.name"
               class="file-chip"
             >
-              <span class="file-chip-name">{{ file.name }}</span>
-              <span v-if="file.size" class="file-chip-meta">{{
-                formatFileSize(file.size)
-              }}</span>
+              <button
+                type="button"
+                class="file-chip-button"
+                @click="downloadConferenceFile(file)"
+              >
+                <span class="file-chip-name">{{ file.name }}</span>
+                <span v-if="file.size" class="file-chip-meta">{{
+                  formatFileSize(file.size)
+                }}</span>
+              </button>
             </div>
           </div>
           <p v-else class="modal-text">
@@ -751,11 +822,7 @@ function saveConferenceChanges() {
 <style scoped>
 .conferences-container {
   min-height: calc(100vh - 140px);
-  background: linear-gradient(
-    135deg,
-    rgba(74, 105, 226, 0.08) 0%,
-    rgba(255, 165, 0, 0.05) 100%
-  );
+  background-color: var(--background-color);
   padding: 40px 15px;
 }
 
@@ -825,6 +892,11 @@ function saveConferenceChanges() {
   cursor: pointer;
   transition: all 0.3s ease;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+:global(html[data-theme="dark"]) .conference-card:hover {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.34);
+  border-color: rgba(74, 105, 226, 0.5);
 }
 
 .conference-card:hover {
@@ -1078,6 +1150,10 @@ function saveConferenceChanges() {
   padding: 20px;
 }
 
+:global(html[data-theme="dark"]) .modal-overlay {
+  background-color: rgba(0, 0, 0, 0.72);
+}
+
 .modal-content {
   background-color: var(--card-background-color);
   border-radius: 16px;
@@ -1149,6 +1225,24 @@ function saveConferenceChanges() {
   border-radius: 10px;
   background: rgba(74, 105, 226, 0.08);
   border: 1px solid rgba(74, 105, 226, 0.12);
+}
+
+.file-chip-button {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.file-chip-button:hover .file-chip-name {
+  color: var(--primary-color);
 }
 
 .file-chip-name {

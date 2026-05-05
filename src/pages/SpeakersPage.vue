@@ -214,6 +214,11 @@
 import { computed, ref, onMounted } from "vue";
 import { useAuthStore } from "../stores/authStore";
 import { useSpeakerStore } from "../stores/speakerStore";
+import { showToast } from "../services/notificationService";
+import {
+  readFileAsDataURL,
+  validateSpeakerPhotoFile,
+} from "../services/speakerPhotoService";
 
 const auth = useAuthStore();
 const speakerStore = useSpeakerStore();
@@ -250,15 +255,24 @@ function createEmptySpeakerForm(speaker = {}) {
   };
 }
 
-function handleSpeakerEditPhotoUpload(event) {
+async function handleSpeakerEditPhotoUpload(event) {
   const file = event.target.files?.[0];
   if (!file) return;
 
-  const reader = new FileReader();
-  reader.onload = () => {
-    editSpeakerForm.value.photo = reader.result;
-  };
-  reader.readAsDataURL(file);
+  const photoError = validateSpeakerPhotoFile(file);
+  if (photoError) {
+    showToast(photoError);
+    event.target.value = "";
+    return;
+  }
+
+  try {
+    editSpeakerForm.value.photo = await readFileAsDataURL(file);
+  } catch (error) {
+    console.error(error);
+    showToast("Не удалось загрузить фото спикера");
+    event.target.value = "";
+  }
 }
 
 function loadSpeakers() {

@@ -27,8 +27,11 @@ export const useConferenceStore = defineStore("conference", {
         bookings: Array.isArray(conference.bookings) ? conference.bookings : [],
         createdAt: new Date().toLocaleDateString("ru-RU"),
       };
-      this.conferences.push(newConference);
-      storageService.setJSON("conferences", this.conferences);
+      const nextConferences = [...this.conferences, newConference];
+      if (!storageService.setJSON("conferences", nextConferences)) {
+        return null;
+      }
+      this.conferences = nextConferences;
       return newConference;
     },
 

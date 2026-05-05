@@ -1,10 +1,12 @@
 <script setup>
 import { computed } from "vue";
+import { useRouter } from "vue-router";
 import { CONFERENCE_TOPICS_ARRAY } from "../constants/topics";
 import { useConferenceStore } from "../stores/conferenceStore";
 
 const topics = CONFERENCE_TOPICS_ARRAY;
 const conferenceStore = useConferenceStore();
+const router = useRouter();
 
 const conferences = computed(() => conferenceStore.getConferences());
 
@@ -36,6 +38,13 @@ function formatConferenceDate(conference) {
     month: "long",
     year: "numeric",
   }).format(date);
+}
+
+function openTopicConferences(topic) {
+  router.push({
+    path: "/conferences",
+    query: { topic },
+  });
 }
 </script>
 
@@ -187,9 +196,15 @@ function formatConferenceDate(conference) {
             конференций.
           </p>
           <div class="topic-list">
-            <span v-for="topic in topics" :key="topic.value" class="topic-pill">
+            <button
+              v-for="topic in topics"
+              :key="topic.value"
+              type="button"
+              class="topic-pill topic-pill-button"
+              @click="openTopicConferences(topic.value)"
+            >
               {{ topic.label }}
-            </span>
+            </button>
           </div>
         </div>
 
@@ -235,6 +250,7 @@ function formatConferenceDate(conference) {
 .home-page {
   max-width: 1200px;
   margin: 0 auto;
+  background-color: var(--background-color);
   padding: 0 15px 40px;
 }
 
@@ -253,11 +269,7 @@ function formatConferenceDate(conference) {
 }
 
 .surface-panel {
-  background: linear-gradient(
-    180deg,
-    rgba(74, 105, 226, 0.06) 0%,
-    rgba(255, 255, 255, 0) 100%
-  );
+  background-color: var(--card-background-color);
   border: 1px solid rgba(74, 105, 226, 0.12);
   border-radius: 18px;
   box-shadow: 0 14px 40px rgba(27, 39, 94, 0.06);
@@ -311,11 +323,7 @@ function formatConferenceDate(conference) {
 }
 
 .nearest-card {
-  background: linear-gradient(
-    180deg,
-    rgba(74, 105, 226, 0.06),
-    rgba(255, 255, 255, 0)
-  );
+  background-color: var(--card-background-color);
   border: 1px solid rgba(74, 105, 226, 0.12);
   border-radius: 18px;
   padding: 32px;
@@ -366,7 +374,7 @@ function formatConferenceDate(conference) {
   gap: 8px;
   padding: 18px 20px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.72);
+  background-color: var(--card-background-color);
   border: 1px solid var(--border-color);
 }
 
@@ -398,6 +406,7 @@ function formatConferenceDate(conference) {
   padding: 40px 32px 36px;
   scroll-margin-top: 140px;
   margin-top: 0;
+  background-color: var(--card-background-color);
 }
 
 .about-header {
@@ -484,6 +493,25 @@ function formatConferenceDate(conference) {
   font-family: "Roboto", sans-serif;
   font-size: 0.9rem;
   font-weight: 600;
+}
+
+.topic-pill-button {
+  border: none;
+  cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.topic-pill-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(255, 165, 0, 0.18);
+}
+
+.topic-pill-button:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
 }
 
 .about-list {

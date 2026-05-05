@@ -6,6 +6,10 @@ import { useConferenceStore } from "../stores/conferenceStore";
 import { useFileStore } from "../stores/fileStore";
 import { useSpeakerStore } from "../stores/speakerStore";
 import { showToast } from "../services/notificationService";
+import {
+  readFileAsDataURL,
+  validateSpeakerPhotoFile,
+} from "../services/speakerPhotoService";
 import SelectDropdown from "../components/SelectDropdown.vue";
 import { CONFERENCE_TOPICS_ARRAY } from "../constants/topics";
 
@@ -56,15 +60,24 @@ const formData = ref({
   },
 });
 
-function handleSpeakerPhotoUpload(event) {
+async function handleSpeakerPhotoUpload(event) {
   const file = event.target.files?.[0];
   if (!file) return;
 
-  const reader = new FileReader();
-  reader.onload = () => {
-    formData.value.speaker.photo = reader.result;
-  };
-  reader.readAsDataURL(file);
+  const photoError = validateSpeakerPhotoFile(file);
+  if (photoError) {
+    showToast(photoError);
+    event.target.value = "";
+    return;
+  }
+
+  try {
+    formData.value.speaker.photo = await readFileAsDataURL(file);
+  } catch (error) {
+    console.error(error);
+    showToast("Не удалось загрузить фото спикера");
+    event.target.value = "";
+  }
 }
 
 function applySelectedSpeaker(speakerId) {
@@ -146,7 +159,20 @@ function submitConference() {
     const currentUserEmail =
       typeof auth.user === "string" ? auth.user : auth.user?.email || "";
 
-    conferenceStore.addConference({
+    const selectedFiles = fileStore.files.filter((file) =>
+      selectedFileNames.value.includes(file.name),
+    );
+    const missingContentFile = selectedFiles.find(
+      (file) => !file.contentId && !file.content,
+    );
+    if (missingContentFile) {
+      showToast(
+        `Файл «${missingContentFile.name}» был загружен раньше и не содержит данных для скачивания. Перезагрузите его в разделе «Материалы».`,
+      );
+      return;
+    }
+
+    const createdConference = conferenceStore.addConference({
       name: formData.value.name,
       description: formData.value.description,
       topic: formData.value.topic,
@@ -156,15 +182,22 @@ function submitConference() {
         ...formData.value.speaker,
         createdBy: currentUserEmail,
       },
-      usedFiles: fileStore.files
-        .filter((file) => selectedFileNames.value.includes(file.name))
-        .map((file) => ({
-          name: file.name,
-          size: file.size,
-          date: file.date,
-        })),
+      usedFiles: selectedFiles.map((file) => ({
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        date: file.date,
+        contentId: file.contentId,
+        sourceUserEmail: currentUserEmail,
+      })),
       createdBy: auth.user.email || auth.user,
     });
+
+    if (!createdConference) {
+      showToast("Не удалось создать конференцию: хранилище переполнено");
+      return;
+    }
+
     showToast("Конференция успешно создана!");
     router.push("/");
   } catch (error) {
@@ -368,11 +401,7 @@ function submitConference() {
 <style scoped>
 .conference-container {
   min-height: calc(100vh - 140px);
-  background: linear-gradient(
-    135deg,
-    rgba(74, 105, 226, 0.08) 0%,
-    rgba(255, 165, 0, 0.05) 100%
-  );
+  background-color: var(--background-color);
   padding: 40px 15px;
 }
 
@@ -554,6 +583,66 @@ function submitConference() {
   font-family: "Roboto", sans-serif;
   font-size: 0.9rem;
   color: var(--text-color);
+  width: 100%;
+  max-width: 320px;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.photo-input::file-selector-button,
+.photo-input::-webkit-file-upload-button {
+  margin-right: 12px;
+  padding: 10px 16px;
+  border: 1px solid rgba(74, 105, 226, 0.35);
+  border-radius: 999px;
+  background: linear-gradient(
+    135deg,
+    rgba(74, 105, 226, 0.16),
+    rgba(74, 105, 226, 0.08)
+  );
+  color: var(--text-color);
+  font-family: "Poppins", sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+
+.photo-input::file-selector-button:hover,
+.photo-input::-webkit-file-upload-button:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(
+    135deg,
+    rgba(74, 105, 226, 0.22),
+    rgba(74, 105, 226, 0.12)
+  );
+  box-shadow: 0 6px 16px rgba(74, 105, 226, 0.18);
+}
+
+:global(html[data-theme="dark"]) .photo-input::file-selector-button,
+:global(html[data-theme="dark"]) .photo-input::-webkit-file-upload-button {
+  border-color: rgba(234, 234, 234, 0.2);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.08),
+    rgba(255, 255, 255, 0.04)
+  );
+  color: var(--text-color);
+}
+
+:global(html[data-theme="dark"]) .photo-input::file-selector-button:hover,
+:global(html[data-theme="dark"])
+  .photo-input::-webkit-file-upload-button:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.13),
+    rgba(255, 255, 255, 0.07)
+  );
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
 }
 
 .action-buttons {

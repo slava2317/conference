@@ -2,7 +2,7 @@
   <div class="profile-page">
     <div class="profile-container">
       <div class="profile-card profile-card--spaced">
-        <h1 class="profile-title">👤 Мой профиль</h1>
+        <h1 class="profile-title">Мой профиль</h1>
 
         <div class="profile-grid profile-grid--spaced">
           <div>
@@ -25,7 +25,7 @@
       </div>
 
       <div class="profile-card profile-card--spaced">
-        <h2 class="profile-section-title">🔐 Смена пароля</h2>
+        <h2 class="profile-section-title">Смена пароля</h2>
 
         <form @submit.prevent="changePassword" class="profile-form">
           <div>
@@ -35,14 +35,50 @@
             >
               Текущий пароль
             </label>
-            <input
-              id="current-password"
-              name="currentPassword"
-              v-model="currentPassword"
-              type="password"
-              placeholder="Введите текущий пароль"
-              class="profile-input"
-            />
+            <div class="password-field" :data-password-tip="PASSWORD_HINT">
+              <input
+                id="current-password"
+                name="currentPassword"
+                v-model="currentPassword"
+                :type="showCurrentPassword ? 'text' : 'password'"
+                placeholder="Введите текущий пароль"
+                class="profile-input profile-input--password"
+              />
+              <button
+                type="button"
+                class="password-toggle"
+                :aria-label="
+                  showCurrentPassword ? 'Скрыть пароль' : 'Показать пароль'
+                "
+                @click="showCurrentPassword = !showCurrentPassword"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                  class="password-icon"
+                >
+                  <path
+                    d="M3 12c0 0 3.5-6.5 9-6.5s9 6.5 9 6.5-3.5 6.5-9 6.5S3 12 3 12Z"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                  <circle cx="12" cy="12" r="2.4" fill="currentColor" />
+                  <line
+                    v-if="!showCurrentPassword"
+                    x1="4"
+                    y1="20"
+                    x2="20"
+                    y2="4"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
           </div>
 
           <div>
@@ -52,14 +88,50 @@
             >
               Новый пароль
             </label>
-            <input
-              id="new-password"
-              name="newPassword"
-              v-model="newPassword"
-              type="password"
-              placeholder="Минимум 6 символов"
-              class="profile-input"
-            />
+            <div class="password-field" :data-password-tip="PASSWORD_HINT">
+              <input
+                id="new-password"
+                name="newPassword"
+                v-model="newPassword"
+                :type="showNewPassword ? 'text' : 'password'"
+                placeholder="Минимум 6 символов"
+                class="profile-input profile-input--password"
+              />
+              <button
+                type="button"
+                class="password-toggle"
+                :aria-label="
+                  showNewPassword ? 'Скрыть пароль' : 'Показать пароль'
+                "
+                @click="showNewPassword = !showNewPassword"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                  class="password-icon"
+                >
+                  <path
+                    d="M3 12c0 0 3.5-6.5 9-6.5s9 6.5 9 6.5-3.5 6.5-9 6.5S3 12 3 12Z"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                  <circle cx="12" cy="12" r="2.4" fill="currentColor" />
+                  <line
+                    v-if="!showNewPassword"
+                    x1="4"
+                    y1="20"
+                    x2="20"
+                    y2="4"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
           </div>
 
           <div>
@@ -69,18 +141,54 @@
             >
               Подтвердить пароль
             </label>
-            <input
-              id="confirm-password"
-              name="confirmPassword"
-              v-model="confirmPassword"
-              type="password"
-              placeholder="Повторите новый пароль"
-              class="profile-input"
-            />
+            <div class="password-field" :data-password-tip="PASSWORD_HINT">
+              <input
+                id="confirm-password"
+                name="confirmPassword"
+                v-model="confirmPassword"
+                :type="showConfirmPassword ? 'text' : 'password'"
+                placeholder="Повторите новый пароль"
+                class="profile-input profile-input--password"
+              />
+              <button
+                type="button"
+                class="password-toggle"
+                :aria-label="
+                  showConfirmPassword ? 'Скрыть пароль' : 'Показать пароль'
+                "
+                @click="showConfirmPassword = !showConfirmPassword"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                  class="password-icon"
+                >
+                  <path
+                    d="M3 12c0 0 3.5-6.5 9-6.5s9 6.5 9 6.5-3.5 6.5-9 6.5S3 12 3 12Z"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                  <circle cx="12" cy="12" r="2.4" fill="currentColor" />
+                  <line
+                    v-if="!showConfirmPassword"
+                    x1="4"
+                    y1="20"
+                    x2="20"
+                    y2="4"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
           </div>
 
           <button type="submit" class="profile-button profile-button--spaced">
-            ✓ Изменить пароль
+            Изменить пароль
           </button>
 
           <button
@@ -88,7 +196,7 @@
             @click.prevent="deleteAccount"
             class="delete-button"
           >
-            🗑️ Удалить аккаунт
+            Удалить аккаунт
           </button>
 
           <p class="profile-note">
@@ -106,6 +214,7 @@ import { useAuthStore } from "../stores/authStore";
 import { useRouter } from "vue-router";
 import { showToast } from "../services/notificationService";
 import * as authService from "../services/authService";
+import { PASSWORD_HINT, validatePassword } from "../services/passwordService";
 
 const auth = useAuthStore();
 const router = useRouter();
@@ -113,6 +222,9 @@ const router = useRouter();
 const currentPassword = ref("");
 const newPassword = ref("");
 const confirmPassword = ref("");
+const showCurrentPassword = ref(false);
+const showNewPassword = ref(false);
+const showConfirmPassword = ref(false);
 
 const userFirstName = computed(() => {
   const users = authService.getJSON("users", []);
@@ -145,8 +257,9 @@ function changePassword() {
     return;
   }
 
-  if (newPassword.value.length < 6) {
-    showToast("Новый пароль должен быть не короче 6 символов");
+  const passwordError = validatePassword(newPassword.value);
+  if (passwordError) {
+    showToast(passwordError);
     return;
   }
 
@@ -175,11 +288,7 @@ function deleteAccount() {
 <style scoped>
 .profile-page {
   min-height: calc(100vh - 140px);
-  background: linear-gradient(
-    135deg,
-    rgba(74, 105, 226, 0.08) 0%,
-    rgba(255, 165, 0, 0.05) 100%
-  );
+  background-color: var(--background-color);
   padding: 40px 15px;
 }
 
@@ -285,6 +394,67 @@ function deleteAccount() {
   font-size: 0.95rem;
   transition: all 0.3s ease;
   box-sizing: border-box;
+}
+
+.profile-input--password {
+  padding-right: 52px;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: textfield;
+}
+
+.profile-input--password::-ms-reveal,
+.profile-input--password::-ms-clear {
+  display: none;
+}
+
+.profile-input--password::-webkit-credentials-auto-fill-button,
+.profile-input--password::-webkit-password-toggle-button,
+.profile-input--password::-webkit-reveal-button {
+  display: none !important;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.password-field {
+  position: relative;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-color);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.85;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.password-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--text-color);
+}
+
+.password-toggle:hover {
+  opacity: 1;
+  transform: translateY(-50%) scale(1.08);
+}
+
+.password-toggle:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+  border-radius: 999px;
 }
 
 .profile-input:focus {

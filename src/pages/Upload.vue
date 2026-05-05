@@ -4,6 +4,7 @@ import { useRouter } from "vue-router";
 import { useAuthStore } from "../stores/authStore";
 import { useFileStore } from "../stores/fileStore";
 import { showToast } from "../services/notificationService";
+import { downloadStoredFile } from "../services/fileContentService";
 
 const auth = useAuthStore();
 const router = useRouter();
@@ -20,14 +21,22 @@ onMounted(() => {
   files.loadFiles();
 });
 
-function upload(e) {
+async function upload(e) {
   if (!auth.isAuthenticated) {
     showToast("Ошибка: требуется авторизация");
     router.push("/login");
     return;
   }
-  files.uploadFiles(e.target.files);
+
+  const fileList = e?.dataTransfer?.files || e?.target?.files;
+  if (!fileList || fileList.length === 0) {
+    showToast("Не удалось получить файлы");
+    return;
+  }
+
+  await files.uploadFiles(fileList);
   showToast("Файлы загружены успешно");
+
   if (fileInput.value) fileInput.value.value = "";
 }
 
@@ -35,6 +44,12 @@ function deleteFile(fileName) {
   if (confirm(`Удалить файл "${fileName}"?`)) {
     files.deleteFile(fileName);
     showToast("Файл удалён");
+  }
+}
+
+async function downloadFile(file) {
+  if (!(await downloadStoredFile(file))) {
+    showToast("Файл недоступен для скачивания");
   }
 }
 
@@ -89,7 +104,7 @@ function formatFileSize(bytes) {
     <div class="upload-wrapper">
       <!-- Загрузка файлов -->
       <div class="card">
-        <h1 class="title">📤 Мои материалы</h1>
+        <h1 class="title">Мои материалы</h1>
         <p class="subtitle">Загружайте материалы конференции любого формата</p>
 
         <!-- Зона загрузки -->
@@ -123,13 +138,15 @@ function formatFileSize(bytes) {
 
       <!-- Список файлов -->
       <div v-if="files.files.length > 0" class="card">
-        <h2 class="subtitle">
-          📋 Загруженные файлы ({{ files.files.length }})
-        </h2>
+        <h2 class="subtitle">Загруженные файлы ({{ files.files.length }})</h2>
         <div class="file-list">
           <div v-for="f in files.files" :key="f.name" class="file-item">
             <!-- Информация файла -->
-            <div class="file-info">
+            <button
+              type="button"
+              class="file-info file-info-button"
+              @click="downloadFile(f)"
+            >
               <div class="file-header">
                 <span class="file-icon">{{ getFileIcon(f.name) }}</span>
                 <span class="file-name">{{ f.name }}</span>
@@ -138,12 +155,21 @@ function formatFileSize(bytes) {
                 <span>📦 {{ formatFileSize(f.size) }}</span>
                 <span v-if="f.date">📅 {{ f.date }}</span>
               </div>
-            </div>
-
-            <!-- Кнопка удаления -->
-            <button @click="deleteFile(f.name)" class="btn-delete">
-              🗑️ Удалить
             </button>
+
+            <div class="file-actions">
+              <button
+                type="button"
+                @click="downloadFile(f)"
+                class="btn-download"
+              >
+                Скачать
+              </button>
+              <!-- Кнопка удаления -->
+              <button @click="deleteFile(f.name)" class="btn-delete">
+                Удалить
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -161,11 +187,7 @@ function formatFileSize(bytes) {
 <style scoped>
 .upload-container {
   min-height: calc(100vh - 140px);
-  background: linear-gradient(
-    135deg,
-    rgba(74, 105, 226, 0.08) 0%,
-    rgba(255, 165, 0, 0.05) 100%
-  );
+  background-color: var(--background-color);
   padding: 40px 15px;
 }
 
@@ -257,6 +279,22 @@ function formatFileSize(bytes) {
 .file-info {
   flex: 1;
   min-width: 0;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.file-info-button:hover .file-name {
+  color: var(--primary-color);
+}
+
+.file-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .file-header {
@@ -303,6 +341,24 @@ function formatFileSize(bytes) {
 
 .btn-delete:hover {
   background-color: #dc2626;
+}
+
+.btn-download {
+  padding: 8px 12px;
+  background-color: rgba(74, 105, 226, 0.12);
+  color: var(--primary-color);
+  border: 1px solid rgba(74, 105, 226, 0.24);
+  border-radius: 8px;
+  font-family: "Roboto", sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.btn-download:hover {
+  background-color: rgba(74, 105, 226, 0.18);
 }
 
 .empty-state {

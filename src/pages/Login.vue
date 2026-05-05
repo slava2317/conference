@@ -2,11 +2,7 @@
   <div
     style="
       min-height: calc(100vh - 140px);
-      background: linear-gradient(
-        135deg,
-        rgba(74, 105, 226, 0.08) 0%,
-        rgba(255, 165, 0, 0.05) 100%
-      );
+      background-color: var(--background-color);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -26,7 +22,7 @@
     >
       <h1
         style="
-          font-family: 'Poppins', sans-serif;
+          font-family: &quot;Poppins&quot;, sans-serif;
           font-size: 2rem;
           font-weight: 700;
           color: var(--text-color);
@@ -38,7 +34,7 @@
       </h1>
       <p
         style="
-          font-family: 'Roboto', sans-serif;
+          font-family: &quot;Roboto&quot;, sans-serif;
           color: var(--light-text-color);
           text-align: center;
           margin: 0 0 30px 0;
@@ -57,7 +53,7 @@
           <label
             style="
               display: block;
-              font-family: 'Roboto', sans-serif;
+              font-family: &quot;Roboto&quot;, sans-serif;
               font-size: 0.85rem;
               font-weight: 500;
               color: var(--text-color);
@@ -79,7 +75,7 @@
           <label
             style="
               display: block;
-              font-family: 'Roboto', sans-serif;
+              font-family: &quot;Roboto&quot;, sans-serif;
               font-size: 0.85rem;
               font-weight: 500;
               color: var(--text-color);
@@ -88,12 +84,14 @@
           >
             🔐 Пароль
           </label>
-          <input
-            v-model="password"
-            type="password"
-            placeholder="Введите пароль"
-            class="auth-input"
-          />
+          <div class="password-field" :data-password-tip="PASSWORD_HINT">
+            <input
+              v-model="password"
+              type="password"
+              placeholder="Введите пароль"
+              class="auth-input"
+            />
+          </div>
         </div>
 
         <!-- Кнопка входа -->
@@ -105,7 +103,7 @@
         style="
           text-align: center;
           margin-top: 20px;
-          font-family: 'Roboto', sans-serif;
+          font-family: &quot;Roboto&quot;, sans-serif;
           color: var(--light-text-color);
           font-size: 0.9rem;
         "
@@ -121,7 +119,7 @@
         style="
           text-align: center;
           margin-top: 15px;
-          font-family: 'Roboto', sans-serif;
+          font-family: &quot;Roboto&quot;, sans-serif;
           font-size: 0.85rem;
         "
       >
@@ -138,6 +136,7 @@ import { ref } from "vue";
 import { useAuthStore } from "../stores/authStore";
 import { useRouter } from "vue-router";
 import { showToast } from "../services/notificationService";
+import { PASSWORD_HINT } from "../services/passwordService";
 
 const email = ref("");
 const password = ref("");
