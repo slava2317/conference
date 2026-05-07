@@ -20,9 +20,10 @@ defineProps({
 <style scoped>
 .card {
   padding: 18px;
-  border-radius: 8px;
+  border-radius: 14px;
   background: var(--panel);
-  box-shadow: 0 6px 18px rgba(20, 24, 40, 0.06);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 10px 24px rgba(20, 24, 40, 0.06);
 }
 .card-head {
   display: flex;
@@ -50,6 +51,7 @@ defineProps({
 }
 .card-body {
   color: var(--muted);
-  font-size: 14px;
+  font-size: 0.95rem;
+  line-height: 1.65;
 }
 </style>

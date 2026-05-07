@@ -1,6 +1,6 @@
 <template>
   <div class="container">
-    <h1 class="text-center mb-4">Спикеры</h1>
+    <h1 class="page-title">Спикеры</h1>
 
     <div v-if="speakers.length === 0" class="empty-state">
       <p class="empty-text">
@@ -43,6 +43,14 @@
         </div>
         <h3>{{ speaker.name }}</h3>
         <p class="speaker-bio-preview">{{ speaker.bio }}</p>
+        <div class="speaker-card-meta">
+          <span class="speaker-card-chip">
+            Автор: {{ getSpeakerCreatorLabel(speaker) }}
+          </span>
+          <span class="speaker-card-chip">
+            Конференций: {{ getSpeakerConferencesCount(speaker) }}
+          </span>
+        </div>
       </div>
     </div>
 
@@ -85,6 +93,21 @@
           <p v-if="selectedSpeaker.bio" class="speaker-bio">
             {{ selectedSpeaker.bio }}
           </p>
+
+          <div class="speaker-modal-meta">
+            <div class="speaker-modal-meta-item">
+              <span class="speaker-modal-meta-label">Автор</span>
+              <span class="speaker-modal-meta-value">
+                {{ getSpeakerCreatorLabel(selectedSpeaker) }}
+              </span>
+            </div>
+            <div class="speaker-modal-meta-item">
+              <span class="speaker-modal-meta-label">Конференций</span>
+              <span class="speaker-modal-meta-value">
+                {{ getSpeakerConferencesCount(selectedSpeaker) }}
+              </span>
+            </div>
+          </div>
 
           <div
             v-if="
@@ -231,13 +254,43 @@ const currentUserEmail = computed(() => {
   if (typeof auth.user === "string") return auth.user;
   return auth.user?.email || "";
 });
+const currentUserIdentifier = computed(() => {
+  if (typeof auth.user === "string") return auth.user;
+  return auth.user?.id || auth.user?.participantId || auth.user?.email || "";
+});
 const canEditSelectedSpeaker = computed(() => {
+  const selectedSpeakerCreator =
+    typeof selectedSpeaker.value?.createdBy === "object" &&
+    selectedSpeaker.value?.createdBy
+      ? selectedSpeaker.value.createdBy.id ||
+        selectedSpeaker.value.createdBy.participantId ||
+        selectedSpeaker.value.createdBy.email ||
+        ""
+      : selectedSpeaker.value?.createdBy || "";
+
   return (
     !!selectedSpeaker.value &&
-    !!selectedSpeaker.value.createdBy &&
-    selectedSpeaker.value.createdBy === currentUserEmail.value
+    !!selectedSpeakerCreator &&
+    String(selectedSpeakerCreator) === String(currentUserIdentifier.value)
   );
 });
+
+function getSpeakerCreatorLabel(speaker) {
+  if (!speaker?.createdBy) return "—";
+
+  if (typeof speaker.createdBy === "object") {
+    const fullName = `${speaker.createdBy.firstName || ""} ${
+      speaker.createdBy.lastName || ""
+    }`.trim();
+    return fullName || speaker.createdBy.email || "—";
+  }
+
+  return String(speaker.createdBy);
+}
+
+function getSpeakerConferencesCount(speaker) {
+  return Array.isArray(speaker?.conferences) ? speaker.conferences.length : 0;
+}
 
 function buildSpeakerId(speaker) {
   return `${speaker?.firstName || ""}|${speaker?.lastName || ""}|${speaker?.email || ""}`
@@ -275,9 +328,9 @@ async function handleSpeakerEditPhotoUpload(event) {
   }
 }
 
-function loadSpeakers() {
+async function loadSpeakers() {
   try {
-    speakerStore.loadSpeakers();
+    await speakerStore.loadSpeakers();
   } catch (error) {
     console.error("Ошибка при загрузке спикеров:", error);
     speakerStore.speakers = [];
@@ -315,7 +368,7 @@ function cancelSpeakerEditing() {
   isEditingSpeaker.value = false;
 }
 
-function saveSpeakerChanges() {
+async function saveSpeakerChanges() {
   if (!selectedSpeaker.value) return;
 
   if (!canEditSelectedSpeaker.value) {
@@ -337,7 +390,7 @@ function saveSpeakerChanges() {
     return;
   }
 
-  const updated = speakerStore.updateSpeaker(
+  const updated = await speakerStore.updateSpeaker(
     selectedSpeakerOriginalId.value,
     {
       firstName: editSpeakerForm.value.firstName.trim(),
@@ -353,7 +406,7 @@ function saveSpeakerChanges() {
     return;
   }
 
-  speakerStore.loadSpeakers();
+  await speakerStore.loadSpeakers();
   const updatedSpeakerId = buildSpeakerId(editSpeakerForm.value);
   selectedSpeaker.value = speakerStore.getSpeakerById(updatedSpeakerId) || {
     ...editSpeakerForm.value,
@@ -497,6 +550,25 @@ function saveSpeakerChanges() {
   text-overflow: ellipsis;
 }
 
+.speaker-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.speaker-card-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(74, 105, 226, 0.08);
+  color: var(--text-color);
+  font-size: 0.68rem;
+  line-height: 1.2;
+}
+
 /* Modal styles */
 .modal-overlay {
   position: fixed;
@@ -581,6 +653,38 @@ function saveSpeakerChanges() {
   line-height: 1.6;
   font-family: "Roboto", sans-serif;
   text-align: left;
+}
+
+.speaker-modal-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+  text-align: left;
+}
+
+.speaker-modal-meta-item {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(74, 105, 226, 0.06);
+  border: 1px solid rgba(74, 105, 226, 0.12);
+}
+
+.speaker-modal-meta-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--light-text-color);
+}
+
+.speaker-modal-meta-value {
+  font-family: "Roboto", sans-serif;
+  font-size: 0.92rem;
+  color: var(--text-color);
+  word-break: break-word;
 }
 
 .speaker-conferences {
@@ -780,6 +884,10 @@ function saveSpeakerChanges() {
 
   .speaker-modal-actions {
     flex-direction: column;
+  }
+
+  .speaker-modal-meta {
+    grid-template-columns: 1fr;
   }
 }
 </style>

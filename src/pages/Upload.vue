@@ -40,9 +40,10 @@ async function upload(e) {
   if (fileInput.value) fileInput.value.value = "";
 }
 
-function deleteFile(fileName) {
+async function deleteFile(file) {
+  const fileName = typeof file === "string" ? file : file?.name || "";
   if (confirm(`Удалить файл "${fileName}"?`)) {
-    files.deleteFile(fileName);
+    await files.deleteFile(file);
     showToast("Файл удалён");
   }
 }
@@ -104,8 +105,8 @@ function formatFileSize(bytes) {
     <div class="upload-wrapper">
       <!-- Загрузка файлов -->
       <div class="card">
-        <h1 class="title">Мои материалы</h1>
-        <p class="subtitle">Загружайте материалы конференции любого формата</p>
+        <h1 class="page-title">Мои материалы</h1>
+        <p class="page-lead">Загружайте материалы конференции любого формата</p>
 
         <!-- Зона загрузки -->
         <div
@@ -166,9 +167,7 @@ function formatFileSize(bytes) {
                 Скачать
               </button>
               <!-- Кнопка удаления -->
-              <button @click="deleteFile(f.name)" class="btn-delete">
-                Удалить
-              </button>
+              <button @click="deleteFile(f)" class="btn-delete">Удалить</button>
             </div>
           </div>
         </div>

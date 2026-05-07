@@ -173,7 +173,7 @@ const password = ref("");
 const auth = useAuthStore();
 const router = useRouter();
 
-function register() {
+async function register() {
   const firstNameValue = firstName.value.trim();
   const lastNameValue = lastName.value.trim();
   const emailValue = email.value.trim();
@@ -196,7 +196,7 @@ function register() {
     return;
   }
 
-  const success = auth.register(
+  const success = await auth.register(
     firstNameValue,
     lastNameValue,
     emailValue,

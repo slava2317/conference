@@ -2,7 +2,7 @@
   <footer class="footer">
     <div class="container">
       <div class="footer-content">
-        <p>© 2025 Conference. Все права защищены.</p>
+        <p>© 2025 Conference. Платформа для управления конференциями.</p>
       </div>
     </div>
   </footer>
@@ -14,10 +14,10 @@
 
 <style scoped>
 .footer {
-  padding: 20px 0;
+  padding: 18px 0;
   background-color: var(--card-background-color);
   border-top: 1px solid var(--border-color);
-  margin-top: 40px;
+  margin-top: 36px;
 }
 
 .footer-content {
@@ -25,5 +25,6 @@
   justify-content: center;
   align-items: center;
   color: var(--light-text-color);
+  font-size: 0.95rem;
 }
 </style>

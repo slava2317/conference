@@ -143,7 +143,7 @@ const password = ref("");
 const auth = useAuthStore();
 const router = useRouter();
 
-function login() {
+async function login() {
   const emailValue = email.value.trim();
   const passwordValue = password.value;
 
@@ -152,7 +152,7 @@ function login() {
     return;
   }
 
-  const success = auth.login(emailValue, passwordValue);
+  const success = await auth.login(emailValue, passwordValue);
 
   if (!success) {
     showToast("Неверные данные");

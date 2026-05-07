@@ -2,7 +2,14 @@
   <div class="profile-page">
     <div class="profile-container">
       <div class="profile-card profile-card--spaced">
-        <h1 class="profile-title">Мой профиль</h1>
+        <h1 class="page-title profile-title">Мой профиль</h1>
+
+        <div class="profile-badges">
+          <span class="profile-badge">Роль: {{ userRole }}</span>
+          <span class="profile-badge profile-badge--muted">
+            ID: {{ userIdentifier || "—" }}
+          </span>
+        </div>
 
         <div class="profile-grid profile-grid--spaced">
           <div>
@@ -213,7 +220,6 @@ import { ref, computed } from "vue";
 import { useAuthStore } from "../stores/authStore";
 import { useRouter } from "vue-router";
 import { showToast } from "../services/notificationService";
-import * as authService from "../services/authService";
 import { PASSWORD_HINT, validatePassword } from "../services/passwordService";
 
 const auth = useAuthStore();
@@ -227,26 +233,27 @@ const showNewPassword = ref(false);
 const showConfirmPassword = ref(false);
 
 const userFirstName = computed(() => {
-  const users = authService.getJSON("users", []);
-  const userEmail =
-    typeof auth.user === "string" ? auth.user : auth.user?.email;
-  const user = users.find((u) => u.email === userEmail);
-  return user?.firstName || "";
+  return auth.user?.firstName || "";
 });
 
 const userLastName = computed(() => {
-  const users = authService.getJSON("users", []);
-  const userEmail =
-    typeof auth.user === "string" ? auth.user : auth.user?.email;
-  const user = users.find((u) => u.email === userEmail);
-  return user?.lastName || "";
+  return auth.user?.lastName || "";
 });
 
 const userEmail = computed(() => {
-  return typeof auth.user === "string" ? auth.user : auth.user?.email;
+  return auth.user?.email || "";
 });
 
-function changePassword() {
+const userRole = computed(() => {
+  return auth.user?.role || "user";
+});
+
+const userIdentifier = computed(() => {
+  if (typeof auth.user === "string") return auth.user;
+  return auth.user?.id || auth.user?.participantId || auth.user?.email || "";
+});
+
+async function changePassword() {
   if (!currentPassword.value || !newPassword.value || !confirmPassword.value) {
     showToast("Заполните все поля");
     return;
@@ -263,7 +270,10 @@ function changePassword() {
     return;
   }
 
-  const success = auth.changePassword(currentPassword.value, newPassword.value);
+  const success = await auth.changePassword(
+    currentPassword.value,
+    newPassword.value,
+  );
 
   if (!success) {
     showToast("Неверный текущий пароль");
@@ -276,9 +286,9 @@ function changePassword() {
   confirmPassword.value = "";
 }
 
-function deleteAccount() {
+async function deleteAccount() {
   if (confirm("Вы уверены? Это действие невозможно отменить.")) {
-    auth.deleteAccount();
+    await auth.deleteAccount();
     showToast("Аккаунт удалён");
     router.push("/");
   }
@@ -318,8 +328,31 @@ function deleteAccount() {
 }
 
 .profile-title {
-  font-size: 2rem;
+  font-size: clamp(2rem, 2.4vw, 2.4rem);
   margin-bottom: 30px;
+}
+
+.profile-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 24px;
+}
+
+.profile-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(74, 105, 226, 0.1);
+  color: var(--text-color);
+  font-family: "Roboto", sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.profile-badge--muted {
+  background: rgba(148, 163, 184, 0.14);
 }
 
 .profile-section-title {
@@ -531,7 +564,7 @@ function deleteAccount() {
   }
 
   .profile-title {
-    font-size: 1.7rem;
+    font-size: clamp(2rem, 2.4vw, 2.4rem);
   }
 
   .profile-section-title {

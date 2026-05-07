@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from "vue";
+import { computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { CONFERENCE_TOPICS_ARRAY } from "../constants/topics";
 import { useConferenceStore } from "../stores/conferenceStore";
@@ -9,6 +9,10 @@ const conferenceStore = useConferenceStore();
 const router = useRouter();
 
 const conferences = computed(() => conferenceStore.getConferences());
+
+onMounted(() => {
+  conferenceStore.loadConferences();
+});
 
 function parseConferenceDate(conference) {
   if (!conference?.date) return null;
@@ -38,6 +42,53 @@ function formatConferenceDate(conference) {
     month: "long",
     year: "numeric",
   }).format(date);
+}
+
+function compactDisplayName(value) {
+  if (!value) return "";
+
+  const parts = String(value).trim().split(/\s+/).filter(Boolean);
+
+  if (parts.length <= 1) {
+    return parts[0] || "";
+  }
+
+  const collapsed = [];
+  for (const part of parts) {
+    if (collapsed[collapsed.length - 1] !== part) {
+      collapsed.push(part);
+    }
+  }
+
+  return collapsed.join(" ").trim();
+}
+
+function getConferenceCreatorLabel(conference) {
+  if (!conference?.createdBy) return "—";
+
+  if (typeof conference.createdBy === "object") {
+    const explicitName = compactDisplayName(conference.createdBy.name);
+    if (explicitName) return explicitName;
+
+    const firstName = compactDisplayName(conference.createdBy.firstName);
+    const lastName = compactDisplayName(conference.createdBy.lastName);
+
+    if (firstName && lastName) {
+      return firstName === lastName ? firstName : `${firstName} ${lastName}`;
+    }
+
+    return compactDisplayName(conference.createdBy.email) || "—";
+  }
+
+  return compactDisplayName(conference.createdBy) || "—";
+}
+
+function getConferenceFilesCount(conference) {
+  return Array.isArray(conference?.usedFiles) ? conference.usedFiles.length : 0;
+}
+
+function getConferenceBookingsCount(conference) {
+  return Array.isArray(conference?.bookings) ? conference.bookings.length : 0;
 }
 
 function openTopicConferences(topic) {
@@ -126,6 +177,27 @@ function openTopicConferences(topic) {
                   nearestConference.description ||
                   "Описание конференции будет опубликовано дополнительно."
                 }}
+              </span>
+            </div>
+
+            <div class="nearest-item">
+              <span class="nearest-label">Автор</span>
+              <span class="nearest-value">
+                {{ getConferenceCreatorLabel(nearestConference) }}
+              </span>
+            </div>
+
+            <div class="nearest-item">
+              <span class="nearest-label">Файлы</span>
+              <span class="nearest-value">
+                {{ getConferenceFilesCount(nearestConference) }}
+              </span>
+            </div>
+
+            <div class="nearest-item nearest-item--wide">
+              <span class="nearest-label">Бронирования</span>
+              <span class="nearest-value">
+                {{ getConferenceBookingsCount(nearestConference) }}
               </span>
             </div>
           </div>
@@ -276,7 +348,7 @@ function openTopicConferences(topic) {
 }
 
 .hero-title {
-  font-size: 2rem;
+  font-size: 2.15rem;
   margin-bottom: 1rem;
   font-weight: 700;
   font-family: "Poppins", sans-serif;
@@ -284,17 +356,17 @@ function openTopicConferences(topic) {
 }
 
 .hero-text {
-  font-size: 1rem;
+  font-size: 1.02rem;
   color: var(--text-color);
   max-width: 740px;
   margin: 0 auto 1rem;
   line-height: 1.7;
   font-family: "Roboto", sans-serif;
+  text-align: justify;
+  text-indent: 1.25em;
 }
 
 .hero-text--lead {
-  font-size: 1.15rem;
-  color: var(--light-text-color);
   max-width: 800px;
 }
 
@@ -359,7 +431,8 @@ function openTopicConferences(topic) {
   font-family: "Roboto", sans-serif;
   font-size: 1.05rem;
   line-height: 1.75;
-  text-align: center;
+  text-align: justify;
+  text-indent: 1.25em;
 }
 
 .nearest-grid {
@@ -396,6 +469,7 @@ function openTopicConferences(topic) {
   font-size: 1rem;
   line-height: 1.65;
   color: var(--text-color);
+  text-align: justify;
 }
 
 .nearest-value--muted {
@@ -406,7 +480,6 @@ function openTopicConferences(topic) {
   padding: 40px 32px 36px;
   scroll-margin-top: 140px;
   margin-top: 0;
-  background-color: var(--card-background-color);
 }
 
 .about-header {
@@ -434,7 +507,7 @@ function openTopicConferences(topic) {
 .about-title {
   margin: 0 0 16px;
   font-family: "Poppins", sans-serif;
-  font-size: 1.65rem;
+  font-size: 1.7rem;
   color: var(--text-color);
   line-height: 1.25;
 }
@@ -445,6 +518,8 @@ function openTopicConferences(topic) {
   font-size: 1.05rem;
   line-height: 1.8;
   font-family: "Roboto", sans-serif;
+  text-align: justify;
+  text-indent: 1.25em;
 }
 
 .about-columns {
@@ -469,11 +544,19 @@ function openTopicConferences(topic) {
   color: var(--text-color);
   font-family: "Roboto", sans-serif;
   line-height: 1.75;
+  text-align: justify;
+  text-indent: 1.25em;
 }
 
 .about-column--wide {
   grid-column: 1 / -1;
   padding-top: 6px;
+}
+
+.about-column--wide .about-list,
+.about-column--wide li {
+  text-align: left;
+  text-indent: 0;
 }
 
 .topic-list {

@@ -143,7 +143,7 @@ function toggleFileSelection(fileName) {
   selectedFileNames.value = [...selectedFileNames.value, fileName];
 }
 
-function submitConference() {
+async function submitConference() {
   if (!isFormValid()) {
     showToast("Заполните все обязательные поля");
     return;
@@ -158,6 +158,10 @@ function submitConference() {
   try {
     const currentUserEmail =
       typeof auth.user === "string" ? auth.user : auth.user?.email || "";
+    const currentUserIdentifier =
+      typeof auth.user === "string"
+        ? auth.user
+        : auth.user?.id || auth.user?.participantId || auth.user?.email || "";
 
     const selectedFiles = fileStore.files.filter((file) =>
       selectedFileNames.value.includes(file.name),
@@ -172,7 +176,7 @@ function submitConference() {
       return;
     }
 
-    const createdConference = conferenceStore.addConference({
+    const createdConference = await conferenceStore.addConference({
       name: formData.value.name,
       description: formData.value.description,
       topic: formData.value.topic,
@@ -190,7 +194,7 @@ function submitConference() {
         contentId: file.contentId,
         sourceUserEmail: currentUserEmail,
       })),
-      createdBy: auth.user.email || auth.user,
+      createdBy: currentUserIdentifier,
     });
 
     if (!createdConference) {
@@ -212,8 +216,8 @@ function submitConference() {
     <div class="conference-wrapper">
       <!-- Заголовок -->
       <div class="header-section">
-        <h1 class="title">Создать конференцию</h1>
-        <p class="subtitle">Заполните информацию о новой конференции</p>
+        <h1 class="page-title">Создать конференцию</h1>
+        <p class="page-lead">Заполните информацию о новой конференции</p>
       </div>
 
       <!-- Форма конференции -->

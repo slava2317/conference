@@ -11,27 +11,45 @@ export const useAuthStore = defineStore("auth", {
   },
 
   actions: {
-    register(firstName, lastName, email, password) {
+    async bootstrap() {
+      const user = await authService.fetchCurrentUser();
+      this.user = user;
+      return user;
+    },
+
+    async register(firstName, lastName, email, password) {
       return authService.registerUser({ firstName, lastName, email, password });
     },
 
-    login(email, password) {
-      const user = authService.loginUser(email, password);
+    async login(email, password) {
+      const user = await authService.loginUser(email, password);
       if (!user) return false;
       this.user = user;
       return true;
     },
 
-    logout() {
+    async logout() {
+      await authService.logoutUser();
       this.user = null;
-      authService.logoutUser();
     },
 
-    changePassword(currentPassword, newPassword) {
+    async changePassword(currentPassword, newPassword) {
+      if (authService.changePasswordOnServer) {
+        try {
+          return await authService.changePasswordOnServer(
+            currentPassword,
+            newPassword,
+          );
+        } catch (error) {
+          console.error("changePassword error:", error);
+          return false;
+        }
+      }
+
       const users = authService.getJSON("users", []);
       const email = typeof this.user === "string" ? this.user : this.user.email;
       const user = users.find(
-        (u) => u.email === email && u.password === currentPassword
+        (u) => u.email === email && u.password === currentPassword,
       );
 
       if (!user) return false;
@@ -41,7 +59,15 @@ export const useAuthStore = defineStore("auth", {
       return true;
     },
 
-    deleteAccount() {
+    async deleteAccount() {
+      if (authService.deleteAccountOnServer) {
+        try {
+          await authService.deleteAccountOnServer();
+        } catch (error) {
+          console.error("deleteAccount error:", error);
+        }
+      }
+
       const users = authService.getJSON("users", []);
       const email = typeof this.user === "string" ? this.user : this.user.email;
       const filtered = users.filter((u) => u.email !== email);
@@ -52,7 +78,7 @@ export const useAuthStore = defineStore("auth", {
       delete files[email];
       authService.setJSON("files", files);
 
-      this.logout();
+      await this.logout();
     },
   },
 });

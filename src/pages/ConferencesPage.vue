@@ -56,6 +56,68 @@ function getCurrentUserEmail() {
   return typeof auth.user === "string" ? auth.user : auth.user?.email || "";
 }
 
+function getCurrentUserIdentifier() {
+  if (typeof auth.user === "string") return auth.user;
+  return auth.user?.id || auth.user?.participantId || auth.user?.email || "";
+}
+
+function compactDisplayName(value) {
+  if (!value) return "";
+
+  const parts = String(value).trim().split(/\s+/).filter(Boolean);
+
+  if (parts.length <= 1) {
+    return parts[0] || "";
+  }
+
+  const collapsed = [];
+  for (const part of parts) {
+    if (collapsed[collapsed.length - 1] !== part) {
+      collapsed.push(part);
+    }
+  }
+
+  return collapsed.join(" ").trim();
+}
+
+function getUserDisplayName(user) {
+  if (!user) return "—";
+  if (typeof user === "string") return compactDisplayName(user) || "—";
+
+  const explicitName = compactDisplayName(user.name);
+  if (explicitName) return explicitName;
+
+  const firstName = compactDisplayName(user.firstName);
+  const lastName = compactDisplayName(user.lastName);
+
+  if (firstName && lastName) {
+    return firstName === lastName ? firstName : `${firstName} ${lastName}`;
+  }
+
+  return firstName || lastName || compactDisplayName(user.email) || "—";
+}
+
+function getConferenceCreatorLabel(conference) {
+  if (!conference?.createdBy) return "—";
+
+  if (typeof conference.createdBy === "object") {
+    return getUserDisplayName(conference.createdBy);
+  }
+
+  if (typeof conference.createdBy === "string" && auth.user) {
+    const currentUserIdentifier = String(getCurrentUserIdentifier());
+    if (String(conference.createdBy) === currentUserIdentifier) {
+      return getUserDisplayName(auth.user);
+    }
+  }
+
+  return String(conference.createdBy);
+}
+
+function getConferenceFilesCount(conference) {
+  return Array.isArray(conference?.usedFiles) ? conference.usedFiles.length : 0;
+}
+
 function getCurrentUserName() {
   if (typeof auth.user === "object" && auth.user) {
     return `${auth.user.firstName || ""} ${auth.user.lastName || ""}`.trim();
@@ -107,6 +169,7 @@ const filteredConferences = computed(() => {
 });
 
 onMounted(() => {
+  conferenceStore.loadConferences();
   if (auth.isAuthenticated) fileStore.loadFiles();
   timerId = window.setInterval(() => {
     currentTime.value = new Date();
@@ -180,7 +243,7 @@ function getConferenceCountdown(conference) {
   return `До начала: ${parts.join(" ")}`;
 }
 
-function bookConference(conference) {
+async function bookConference(conference) {
   if (!auth.isAuthenticated) {
     showToast("Чтобы записаться, войдите в аккаунт");
     return;
@@ -192,7 +255,7 @@ function bookConference(conference) {
   }
 
   const email = getCurrentUserEmail();
-  const booking = conferenceStore.bookConference(conference.id, {
+  const booking = await conferenceStore.bookConference(conference.id, {
     email,
     name: getCurrentUserName(),
   });
@@ -206,11 +269,11 @@ function bookConference(conference) {
   showToast("Вы записаны на конференцию. Напоминание придет за час до начала.");
 }
 
-function cancelConferenceBooking(conference) {
+async function cancelConferenceBooking(conference) {
   if (!auth.isAuthenticated) return;
 
   const email = getCurrentUserEmail();
-  const removed = conferenceStore.cancelBooking(conference.id, email);
+  const removed = await conferenceStore.cancelBooking(conference.id, email);
   if (!removed) {
     showToast("Не удалось отменить запись");
     return;
@@ -222,20 +285,23 @@ function cancelConferenceBooking(conference) {
 
 function canDeleteConference(conference) {
   if (!auth.isAuthenticated) return false;
-  const currentUserEmail =
-    typeof auth.user === "string" ? auth.user : auth.user?.email;
-  const creatorEmail =
-    typeof conference?.createdBy === "string"
-      ? conference.createdBy
-      : conference?.createdBy?.email;
-  return currentUserEmail === creatorEmail;
+  const currentUserIdentifier = String(getCurrentUserIdentifier());
+  const creatorIdentifier = String(
+    typeof conference?.createdBy === "object" && conference?.createdBy
+      ? conference.createdBy.id ||
+          conference.createdBy.participantId ||
+          conference.createdBy.email ||
+          ""
+      : conference?.createdBy || "",
+  );
+  return currentUserIdentifier === creatorIdentifier;
 }
 
 function canManageConference(conference) {
   return canDeleteConference(conference);
 }
 
-function deleteConference(id) {
+async function deleteConference(id) {
   const conference = conferences.value.find((conf) => conf?.id === id);
   if (!conference) {
     showToast("Конференция не найдена");
@@ -246,7 +312,7 @@ function deleteConference(id) {
     return;
   }
   if (confirm("Удалить эту конференцию?")) {
-    conferenceStore.deleteConference(id);
+    await conferenceStore.deleteConference(id);
     selectedConference.value = null;
     isEditing.value = false;
     showToast("Конференция удалена");
@@ -326,7 +392,7 @@ function cancelEditing() {
   isEditing.value = false;
 }
 
-function saveConferenceChanges() {
+async function saveConferenceChanges() {
   if (!selectedConference.value) return;
 
   const currentEditForm = editForm.value;
@@ -377,7 +443,7 @@ function saveConferenceChanges() {
     return;
   }
 
-  conferenceStore.updateConference(
+  await conferenceStore.updateConference(
     selectedConference.value.id,
     updatedConference,
   );
@@ -409,8 +475,8 @@ async function downloadConferenceFile(file) {
   <div class="conferences-container">
     <div class="conferences-wrapper">
       <div class="header-section">
-        <h1 class="title">Все конференции</h1>
-        <p class="subtitle">Список всех созданных конференций</p>
+        <h1 class="page-title">Все конференции</h1>
+        <p class="page-lead">Список всех созданных конференций</p>
       </div>
 
       <div class="card filter-card">
@@ -508,6 +574,15 @@ async function downloadConferenceFile(file) {
               {{ getConferenceBookingsCount(conf) }} участн.
             </span>
           </div>
+
+          <div class="conference-footer-meta">
+            <span class="conference-meta-chip">
+              Автор: {{ getConferenceCreatorLabel(conf) }}
+            </span>
+            <span class="conference-meta-chip">
+              Файлы: {{ getConferenceFilesCount(conf) }}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -578,6 +653,27 @@ async function downloadConferenceFile(file) {
           <p class="modal-text">
             {{ selectedConference.date }} в {{ selectedConference.time }}
           </p>
+        </div>
+
+        <div class="modal-section modal-section--meta-grid">
+          <div class="modal-meta-item">
+            <h3 class="modal-subtitle">Автор конференции</h3>
+            <p class="modal-text">
+              {{ getConferenceCreatorLabel(selectedConference) }}
+            </p>
+          </div>
+          <div class="modal-meta-item">
+            <h3 class="modal-subtitle">Количество файлов</h3>
+            <p class="modal-text">
+              {{ getConferenceFilesCount(selectedConference) }}
+            </p>
+          </div>
+          <div class="modal-meta-item">
+            <h3 class="modal-subtitle">Бронирования</h3>
+            <p class="modal-text">
+              {{ getConferenceBookingsCount(selectedConference) }}
+            </p>
+          </div>
         </div>
 
         <div class="modal-section">
@@ -987,6 +1083,25 @@ async function downloadConferenceFile(file) {
   flex-wrap: wrap;
 }
 
+.conference-footer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.conference-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(74, 105, 226, 0.08);
+  color: var(--text-color);
+  font-family: "Roboto", sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
 .conference-book-button,
 .btn-book {
   border: none;
@@ -1208,6 +1323,19 @@ async function downloadConferenceFile(file) {
 
 .modal-section {
   margin-bottom: 24px;
+}
+
+.modal-section--meta-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.modal-meta-item {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(74, 105, 226, 0.06);
+  border: 1px solid rgba(74, 105, 226, 0.12);
 }
 
 .files-list {
@@ -1537,6 +1665,10 @@ async function downloadConferenceFile(file) {
 
   .modal-actions {
     flex-direction: column;
+  }
+
+  .modal-section--meta-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -1,12 +1,16 @@
 <template>
   <div class="container">
-    <h1 class="text-center mb-4">Расписание</h1>
+    <h1 class="page-title">Расписание</h1>
 
     <div class="filters">
-      <select v-model="selectedTrack" class="filter-select">
+      <select v-model="selectedTopic" class="filter-select">
         <option value="">Все потоки</option>
-        <option v-for="track in tracks" :key="track" :value="track">
-          {{ track }}
+        <option
+          v-for="topic in topicOptions"
+          :key="topic.value"
+          :value="topic.value"
+        >
+          {{ topic.label }}
         </option>
       </select>
       <input
@@ -27,7 +31,7 @@
         <div class="event-details">
           <h3 class="event-title">{{ event.title }}</h3>
           <p class="event-speaker">{{ event.speaker }}</p>
-          <span class="tag">{{ event.track }}</span>
+          <span class="tag">{{ event.topicLabel }}</span>
         </div>
         <button
           class="favorite-btn"
@@ -42,53 +46,75 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, onMounted } from "vue";
+import { useConferenceStore } from "../stores/conferenceStore";
+import { CONFERENCE_TOPICS_ARRAY } from "../constants/topics";
 
-const schedule = ref([
-  {
-    id: 1,
-    time: "10:00 - 11:00",
-    title: "Введение в квантовые вычисления",
-    speaker: "Елена Волкова",
-    track: "Искусственный интеллект",
-  },
-  {
-    id: 2,
-    time: "11:00 - 12:00",
-    title: "Архитектура современных веб-приложений",
-    speaker: "Алексей Петров",
-    track: "Веб-разработка",
-  },
-  {
-    id: 3,
-    time: "12:00 - 13:00",
-    title: "Атаки на корпоративные сети: методы и защита",
-    speaker: "Иван Сидоров",
-    track: "Кибербезопасность",
-  },
-  {
-    id: 4,
-    time: "14:00 - 15:00",
-    title: "Генеративные модели в действии",
-    speaker: "Елена Волкова",
-    track: "Искусственный интеллект",
-  },
-]);
-
-const tracks = computed(() => [...new Set(schedule.value.map((e) => e.track))]);
-const selectedTrack = ref("");
+const conferenceStore = useConferenceStore();
+const conferences = computed(() => conferenceStore.getConferences());
+const topicOptions = CONFERENCE_TOPICS_ARRAY;
+const selectedTopic = ref("");
 const searchQuery = ref("");
 const favorites = ref(JSON.parse(localStorage.getItem("favorites")) || []);
 
+onMounted(() => {
+  conferenceStore.loadConferences();
+});
+
+function parseConferenceDate(conference) {
+  if (!conference?.date) return Number.MAX_SAFE_INTEGER;
+  const timePart = conference.time || "00:00";
+  const parsed = new Date(`${conference.date}T${timePart}:00`);
+  return Number.isNaN(parsed.getTime())
+    ? Number.MAX_SAFE_INTEGER
+    : parsed.getTime();
+}
+
+function formatConferenceTime(conference) {
+  if (!conference?.time) return "—";
+  return conference.time;
+}
+
+function formatSpeakerName(conference) {
+  const speaker = conference?.speaker;
+  if (!speaker) return "—";
+
+  const fullName = `${speaker.firstName || speaker.first_name || ""} ${
+    speaker.lastName || speaker.last_name || ""
+  }`.trim();
+
+  return fullName || speaker.email || "—";
+}
+
+const scheduleItems = computed(() =>
+  [...conferences.value]
+    .sort(
+      (first, second) =>
+        parseConferenceDate(first) - parseConferenceDate(second),
+    )
+    .map((conference) => ({
+      id: conference.id,
+      time: formatConferenceTime(conference),
+      title: conference.name || "Без названия",
+      speaker: formatSpeakerName(conference),
+      topic: conference.topic || "",
+      topicLabel:
+        topicOptions.find((item) => item.value === conference.topic)?.label ||
+        conference.topic ||
+        "Тема не указана",
+    })),
+);
+
 const filteredSchedule = computed(() => {
-  return schedule.value.filter((event) => {
-    const matchesTrack =
-      !selectedTrack.value || event.track === selectedTrack.value;
+  return scheduleItems.value.filter((event) => {
+    const matchesTopic =
+      !selectedTopic.value || event.topic === selectedTopic.value;
     const matchesSearch =
       !searchQuery.value ||
       event.title.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      event.speaker.toLowerCase().includes(searchQuery.value.toLowerCase());
-    return matchesTrack && matchesSearch;
+      event.speaker.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
+      event.topicLabel.toLowerCase().includes(searchQuery.value.toLowerCase());
+    return matchesTopic && matchesSearch;
   });
 });
 
@@ -161,7 +187,9 @@ function isFavorite(id) {
   font-size: 1.8rem;
   cursor: pointer;
   color: var(--border-color);
-  transition: color 0.3s, transform 0.3s;
+  transition:
+    color 0.3s,
+    transform 0.3s;
 }
 .favorite-btn:hover {
   transform: scale(1.2);

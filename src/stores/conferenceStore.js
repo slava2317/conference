@@ -1,5 +1,10 @@
 import { defineStore } from "pinia";
 import * as storageService from "../services/storageService";
+import { apiRequestJSON, isApiConfigured } from "../services/apiClient";
+import {
+  normalizeConferenceRecord,
+  toConferencePayload,
+} from "../services/apiSchema";
 
 function parseConferenceDate(conference) {
   if (!conference?.date) return null;
@@ -16,15 +21,54 @@ function isConferenceInFuture(conference, now = new Date()) {
 
 export const useConferenceStore = defineStore("conference", {
   state: () => ({
-    conferences: storageService.getJSON("conferences", []),
+    conferences: storageService
+      .getJSON("conferences", [])
+      .map(normalizeConferenceRecord),
+    isLoading: false,
   }),
 
   actions: {
-    addConference(conference) {
+    async loadConferences() {
+      if (!isApiConfigured()) {
+        this.conferences = storageService
+          .getJSON("conferences", [])
+          .map(normalizeConferenceRecord);
+        return this.conferences;
+      }
+
+      this.isLoading = true;
+      try {
+        const response = await apiRequestJSON("/api/conferences", {
+          method: "GET",
+        });
+        const conferences = Array.isArray(response)
+          ? response
+          : response?.data || response?.conferences || [];
+        this.conferences = conferences.map(normalizeConferenceRecord);
+        return this.conferences;
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    async addConference(conference) {
+      const payload = toConferencePayload(conference);
+
+      if (isApiConfigured()) {
+        const response = await apiRequestJSON("/api/conferences", {
+          method: "POST",
+          body: payload,
+        });
+        const createdConference = normalizeConferenceRecord(
+          response?.data || response,
+        );
+        this.conferences = [...this.conferences, createdConference];
+        return createdConference;
+      }
+
       const newConference = {
         id: Date.now(),
-        ...conference,
-        bookings: Array.isArray(conference.bookings) ? conference.bookings : [],
+        ...payload,
         createdAt: new Date().toLocaleDateString("ru-RU"),
       };
       const nextConferences = [...this.conferences, newConference];
@@ -36,11 +80,15 @@ export const useConferenceStore = defineStore("conference", {
     },
 
     getConferences() {
-      // Убедимся, что мы всегда получаем свежие данные из localStorage
-      const stored = storageService.getJSON("conferences", []);
-      // Обновим состояние, если есть различия
-      if (JSON.stringify(this.conferences) !== JSON.stringify(stored)) {
-        this.conferences = stored;
+      if (!isApiConfigured()) {
+        // Убедимся, что мы всегда получаем свежие данные из localStorage
+        const stored = storageService
+          .getJSON("conferences", [])
+          .map(normalizeConferenceRecord);
+        // Обновим состояние, если есть различия
+        if (JSON.stringify(this.conferences) !== JSON.stringify(stored)) {
+          this.conferences = stored;
+        }
       }
       return this.conferences;
     },
@@ -49,12 +97,33 @@ export const useConferenceStore = defineStore("conference", {
       return this.conferences.find((conf) => conf.id === id);
     },
 
-    deleteConference(id) {
+    async deleteConference(id) {
+      if (isApiConfigured()) {
+        await apiRequestJSON(`/api/conferences/${id}`, { method: "DELETE" });
+        this.conferences = this.conferences.filter((conf) => conf.id !== id);
+        return true;
+      }
+
       this.conferences = this.conferences.filter((conf) => conf.id !== id);
       storageService.setJSON("conferences", this.conferences);
+      return true;
     },
 
-    updateConference(id, updatedConference) {
+    async updateConference(id, updatedConference) {
+      if (isApiConfigured()) {
+        const response = await apiRequestJSON(`/api/conferences/${id}`, {
+          method: "PUT",
+          body: toConferencePayload(updatedConference),
+        });
+        const normalizedConference = normalizeConferenceRecord(
+          response?.data || response,
+        );
+        this.conferences = this.conferences.map((conf) =>
+          conf.id === id ? normalizedConference : conf,
+        );
+        return normalizedConference;
+      }
+
       const index = this.conferences.findIndex((conf) => conf.id === id);
       if (index !== -1) {
         this.conferences[index] = {
@@ -62,10 +131,22 @@ export const useConferenceStore = defineStore("conference", {
           ...updatedConference,
         };
         storageService.setJSON("conferences", this.conferences);
+        return this.conferences[index];
       }
+
+      return null;
     },
 
-    bookConference(id, booking) {
+    async bookConference(id, booking) {
+      if (isApiConfigured()) {
+        const response = await apiRequestJSON(`/api/conferences/${id}/book`, {
+          method: "POST",
+          body: booking,
+        });
+        await this.loadConferences();
+        return response?.data || response;
+      }
+
       const index = this.conferences.findIndex((conf) => conf.id === id);
       if (index === -1) return null;
 
@@ -102,7 +183,22 @@ export const useConferenceStore = defineStore("conference", {
       return newBooking;
     },
 
-    cancelBooking(id, email) {
+    async cancelBooking(id, email) {
+      if (isApiConfigured()) {
+        const conference = this.getConferenceById(id);
+        const booking = Array.isArray(conference?.bookings)
+          ? conference.bookings.find((item) => item.email === email)
+          : null;
+
+        if (!booking?.id) return false;
+
+        await apiRequestJSON(`/api/conferences/${id}/bookings/${booking.id}`, {
+          method: "DELETE",
+        });
+        await this.loadConferences();
+        return true;
+      }
+
       const index = this.conferences.findIndex((conf) => conf.id === id);
       if (index === -1) return false;
 

@@ -4,10 +4,12 @@ import Navbar from "./components/Navbar.vue";
 import ToastContainer from "./components/ToastContainer.vue";
 import { useThemeStore } from "./stores/themeStore";
 import { useConferenceStore } from "./stores/conferenceStore";
+import { useAuthStore } from "./stores/authStore";
 import { showToast } from "./services/notificationService";
 
 const theme = useThemeStore();
 const conferenceStore = useConferenceStore();
+const auth = useAuthStore();
 let reminderTimerId = null;
 
 function processConferenceReminders() {
@@ -31,8 +33,12 @@ function processConferenceReminders() {
 
 onMounted(() => {
   theme.initTheme();
-  processConferenceReminders();
-  reminderTimerId = window.setInterval(processConferenceReminders, 60000);
+  (async () => {
+    await auth.bootstrap();
+    await conferenceStore.loadConferences?.();
+    processConferenceReminders();
+    reminderTimerId = window.setInterval(processConferenceReminders, 60000);
+  })();
 });
 
 onBeforeUnmount(() => {

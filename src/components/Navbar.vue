@@ -76,8 +76,8 @@ function logout() {
   position: sticky;
   top: 0;
   width: 100%;
-  background-color: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
+  background-color: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
   z-index: 1000;
   border-bottom: 1px solid var(--border-color);
   transition:
@@ -94,8 +94,8 @@ function logout() {
   justify-content: space-between;
   align-items: center;
   height: 70px;
-  padding: 0 30px;
-  max-width: 1400px;
+  padding: 0 24px;
+  max-width: 1240px;
   width: 100%;
   margin: 0 auto;
   box-sizing: border-box;
@@ -105,13 +105,13 @@ function logout() {
 .nav-right {
   display: flex;
   align-items: center;
-  gap: 32px;
+  gap: 24px;
 }
 
 .nav-brand {
   font-family: var(--font-family-headings);
   font-weight: 700;
-  font-size: 26px;
+  font-size: 24px;
   color: var(--primary-color);
   text-decoration: none;
   margin-right: 12px;
@@ -121,7 +121,7 @@ function logout() {
   text-decoration: none;
   color: var(--text-color);
   font-weight: 500;
-  font-size: 1.05rem;
+  font-size: 0.98rem;
   transition: color 0.3s;
   white-space: nowrap;
 }
@@ -142,7 +142,7 @@ function logout() {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 22px;
+  font-size: 20px;
   color: var(--text-color);
   transition: transform 0.3s;
   padding: 8px;
@@ -166,7 +166,7 @@ function logout() {
   }
 
   .nav-brand {
-    font-size: 22px;
+    font-size: 21px;
     margin-right: 8px;
   }
 

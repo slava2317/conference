@@ -1,6 +1,12 @@
 import { defineStore } from "pinia";
 import * as storageService from "../services/storageService";
 import { useConferenceStore } from "./conferenceStore";
+import { apiRequestJSON, isApiConfigured } from "../services/apiClient";
+import {
+  normalizeSpeakerRecord,
+  normalizeSpeakerSummaryRecord,
+  toSpeakerPayload,
+} from "../services/apiSchema";
 
 function buildSpeakerId(speaker) {
   const firstName = speaker?.firstName || "";
@@ -12,10 +18,29 @@ function buildSpeakerId(speaker) {
 export const useSpeakerStore = defineStore("speaker", {
   state: () => ({
     speakers: [],
+    isLoading: false,
   }),
 
   actions: {
-    loadSpeakers() {
+    async loadSpeakers() {
+      if (isApiConfigured()) {
+        this.isLoading = true;
+        try {
+          const response = await apiRequestJSON("/api/speakers", {
+            method: "GET",
+          });
+          const speakers = Array.isArray(response)
+            ? response
+            : response?.data || response?.speakers || [];
+          this.speakers = speakers.map((speaker) =>
+            normalizeSpeakerRecord(speaker),
+          );
+          return this.speakers;
+        } finally {
+          this.isLoading = false;
+        }
+      }
+
       const conferenceStore = useConferenceStore();
       const conferences = conferenceStore.getConferences();
       const speakersMap = new Map();
@@ -45,7 +70,8 @@ export const useSpeakerStore = defineStore("speaker", {
 
           const speakerData = speakersMap.get(speakerId);
           if (!speakerData.createdBy) {
-            speakerData.createdBy = speaker.createdBy || conference.createdBy || "";
+            speakerData.createdBy =
+              speaker.createdBy || conference.createdBy || "";
           }
           if (!speakerData.bio && speaker.bio) {
             speakerData.bio = speaker.bio;
@@ -71,7 +97,7 @@ export const useSpeakerStore = defineStore("speaker", {
     },
 
     getSpeakerById(id) {
-      return this.loadSpeakers().find((speaker) => speaker.id === id);
+      return this.speakers.find((speaker) => speaker.id === id);
     },
 
     getSpeakerOptions() {
@@ -81,7 +107,24 @@ export const useSpeakerStore = defineStore("speaker", {
       }));
     },
 
-    updateSpeaker(oldSpeakerId, updatedSpeaker, requesterEmail = "") {
+    async updateSpeaker(oldSpeakerId, updatedSpeaker, requesterEmail = "") {
+      if (isApiConfigured()) {
+        const response = await apiRequestJSON(`/api/speakers/${oldSpeakerId}`, {
+          method: "PATCH",
+          body: toSpeakerPayload(updatedSpeaker),
+        });
+        const normalizedSpeaker = normalizeSpeakerRecord(
+          response?.data || response,
+        );
+        this.speakers = this.speakers.map((speaker) =>
+          speaker.id === oldSpeakerId ? normalizedSpeaker : speaker,
+        );
+
+        const conferenceStore = useConferenceStore();
+        await conferenceStore.loadConferences?.();
+        return normalizedSpeaker;
+      }
+
       const currentSpeaker = this.loadSpeakers().find(
         (speaker) => speaker.id === oldSpeakerId,
       );
