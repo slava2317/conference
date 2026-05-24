@@ -35,7 +35,9 @@ onMounted(() => {
   theme.initTheme();
   (async () => {
     await auth.bootstrap();
-    await conferenceStore.loadConferences?.();
+    if (auth.isAuthenticated) {
+      await conferenceStore.loadConferences?.();
+    }
     processConferenceReminders();
     reminderTimerId = window.setInterval(processConferenceReminders, 60000);
   })();

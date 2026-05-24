@@ -1,20 +1,41 @@
 <script setup>
-import { onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "../stores/authStore";
 import { useFileStore } from "../stores/fileStore";
 import { showToast } from "../services/notificationService";
 import { downloadStoredFile } from "../services/fileContentService";
+import { getApiErrorMessage } from "../services/apiErrorService";
+import {
+  ALLOWED_UPLOAD_ACCEPT,
+  ALLOWED_UPLOAD_MESSAGE,
+  validateUploadFiles,
+} from "../services/fileUploadValidationService";
 
 const auth = useAuthStore();
 const router = useRouter();
 const files = useFileStore();
 const fileInput = ref(null);
+const showAuthModal = ref(false);
+const materialsTitle = computed(() =>
+  auth.isAdmin ? "Все материалы" : "Мои материалы",
+);
+const materialsLead = computed(() =>
+  auth.isAdmin
+    ? "Просматривайте и управляйте материалами всех пользователей"
+    : "Загружайте материалы конференции в PDF, TXT, DOCX и PPTX",
+);
+
+function goToLogin() {
+  showAuthModal.value = false;
+  router.push("/login");
+}
 
 onMounted(() => {
   // Если пользователь не авторизован, редиректим на логин
   if (!auth.isAuthenticated) {
     showToast("Пожалуйста, авторизуйтесь для загрузки материалов");
+    showAuthModal.value = true;
     router.push("/login");
     return;
   }
@@ -34,8 +55,19 @@ async function upload(e) {
     return;
   }
 
-  await files.uploadFiles(fileList);
-  showToast("Файлы загружены успешно");
+  if (!validateUploadFiles(fileList)) {
+    showToast(ALLOWED_UPLOAD_MESSAGE);
+    if (fileInput.value) fileInput.value.value = "";
+    return;
+  }
+
+  try {
+    await files.uploadFiles(fileList);
+    showToast("Файлы загружены успешно");
+  } catch (error) {
+    showToast(getApiErrorMessage(error, "Не удалось загрузить файлы"));
+    console.error("upload error:", error);
+  }
 
   if (fileInput.value) fileInput.value.value = "";
 }
@@ -81,6 +113,10 @@ function formatFileSize(bytes) {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " KB";
   return (bytes / (1024 * 1024)).toFixed(2) + " MB";
 }
+
+function getFileKey(file, index) {
+  return file?.id || file?.contentId || file?.file_id || `${file?.name}-${index}`;
+}
 </script>
 
 <template>
@@ -105,8 +141,8 @@ function formatFileSize(bytes) {
     <div class="upload-wrapper">
       <!-- Загрузка файлов -->
       <div class="card">
-        <h1 class="page-title">Мои материалы</h1>
-        <p class="page-lead">Загружайте материалы конференции любого формата</p>
+        <h1 class="page-title">{{ materialsTitle }}</h1>
+        <p class="page-lead">{{ materialsLead }}</p>
 
         <!-- Зона загрузки -->
         <div
@@ -124,13 +160,14 @@ function formatFileSize(bytes) {
         >
           <div class="upload-icon">⬆️</div>
           <p class="upload-text">Перетащите файлы или нажмите</p>
-          <p class="upload-subtext">Поддерживаются все форматы файлов</p>
+          <p class="upload-subtext">Поддерживаются PDF, TXT, DOCX и PPTX</p>
         </div>
 
         <!-- Скрытый input -->
         <input
           ref="fileInput"
           type="file"
+          :accept="ALLOWED_UPLOAD_ACCEPT"
           multiple
           @change="upload"
           style="display: none"
@@ -141,7 +178,11 @@ function formatFileSize(bytes) {
       <div v-if="files.files.length > 0" class="card">
         <h2 class="subtitle">Загруженные файлы ({{ files.files.length }})</h2>
         <div class="file-list">
-          <div v-for="f in files.files" :key="f.name" class="file-item">
+          <div
+            v-for="(f, index) in files.files"
+            :key="getFileKey(f, index)"
+            class="file-item"
+          >
             <!-- Информация файла -->
             <button
               type="button"

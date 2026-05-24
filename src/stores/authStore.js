@@ -8,10 +8,17 @@ export const useAuthStore = defineStore("auth", {
 
   getters: {
     isAuthenticated: (state) => !!state.user,
+    isAdmin: (state) => state.user?.role === "admin",
   },
 
   actions: {
     async bootstrap() {
+      const user = await authService.fetchCurrentUser();
+      this.user = user;
+      return user;
+    },
+
+    async refreshProfile() {
       const user = await authService.fetchCurrentUser();
       this.user = user;
       return user;
@@ -25,7 +32,18 @@ export const useAuthStore = defineStore("auth", {
       const user = await authService.loginUser(email, password);
       if (!user) return false;
       this.user = user;
+      const profile = await authService.fetchCurrentUser();
+      if (profile) {
+        this.user = profile;
+      }
       return true;
+    },
+
+    markAdminForbidden() {
+      if (this.user && typeof this.user === "object") {
+        this.user = { ...this.user, role: "user" };
+        authService.setJSON("currentUser", this.user);
+      }
     },
 
     async logout() {

@@ -1,5 +1,5 @@
 import { getFileContent } from "./fileStorageService";
-import { apiRequest, isApiConfigured } from "./apiClient";
+import { apiRequest, isApiConfigured, normalizeApiPath } from "./apiClient";
 
 export function readFileAsDataURL(file) {
   return new Promise((resolve, reject) => {
@@ -36,7 +36,7 @@ export async function downloadStoredFile(file) {
   if (isApiConfigured() && (file?.downloadUrl || file?.id)) {
     try {
       const response = await apiRequest(
-        file.downloadUrl || `/api/files/${file.id}/download`,
+        normalizeApiPath(file.downloadUrl || `/files/${file.id}/download`),
         { method: "GET", responseType: "blob" },
       );
 

@@ -1,65 +1,17 @@
 <template>
-  <div
-    style="
-      min-height: calc(100vh - 140px);
-      background-color: var(--background-color);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 40px 15px;
-    "
-  >
-    <div
-      style="
-        max-width: 400px;
-        width: 100%;
-        background-color: var(--card-background-color);
-        border-radius: 16px;
-        padding: 40px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-        border: 1px solid var(--border-color);
-      "
-    >
-      <h1
-        style="
-          font-family: &quot;Poppins&quot;, sans-serif;
-          font-size: 2rem;
-          font-weight: 700;
-          color: var(--text-color);
-          text-align: center;
-          margin: 0 0 10px 0;
-        "
-      >
+  <div class="auth-page">
+    <div class="auth-card">
+      <h1 class="auth-title">
         Вход
       </h1>
-      <p
-        style="
-          font-family: &quot;Roboto&quot;, sans-serif;
-          color: var(--light-text-color);
-          text-align: center;
-          margin: 0 0 30px 0;
-          font-size: 0.95rem;
-        "
-      >
+      <p class="auth-subtitle">
         Введите ваши учетные данные для входа
       </p>
 
-      <form
-        @submit.prevent="login"
-        style="display: flex; flex-direction: column; gap: 18px"
-      >
+      <form @submit.prevent="login" class="auth-form">
         <!-- Email -->
         <div>
-          <label
-            style="
-              display: block;
-              font-family: &quot;Roboto&quot;, sans-serif;
-              font-size: 0.85rem;
-              font-weight: 500;
-              color: var(--text-color);
-              margin-bottom: 6px;
-            "
-          >
+          <label class="auth-label">
             📧 Email
           </label>
           <input
@@ -72,16 +24,7 @@
 
         <!-- Пароль -->
         <div>
-          <label
-            style="
-              display: block;
-              font-family: &quot;Roboto&quot;, sans-serif;
-              font-size: 0.85rem;
-              font-weight: 500;
-              color: var(--text-color);
-              margin-bottom: 6px;
-            "
-          >
+          <label class="auth-label">
             🔐 Пароль
           </label>
           <div class="password-field" :data-password-tip="PASSWORD_HINT">
@@ -95,19 +38,13 @@
         </div>
 
         <!-- Кнопка входа -->
-        <button type="submit" class="auth-button">🚀 Войти</button>
+        <button type="submit" class="auth-button" :disabled="isSubmitting">
+          {{ isSubmitting ? "Входим..." : "🚀 Войти" }}
+        </button>
       </form>
 
       <!-- Ссылка на регистрацию -->
-      <p
-        style="
-          text-align: center;
-          margin-top: 20px;
-          font-family: &quot;Roboto&quot;, sans-serif;
-          color: var(--light-text-color);
-          font-size: 0.9rem;
-        "
-      >
+      <p class="auth-footer">
         Нет аккаунта?
         <router-link to="/register" class="auth-link">
           Зарегистрироваться
@@ -115,14 +52,7 @@
       </p>
 
       <!-- Забыли пароль -->
-      <p
-        style="
-          text-align: center;
-          margin-top: 15px;
-          font-family: &quot;Roboto&quot;, sans-serif;
-          font-size: 0.85rem;
-        "
-      >
+      <p class="auth-footer auth-footer--forgot">
         <router-link to="/forgot" class="forgot-link">
           Забыли пароль?
         </router-link>
@@ -137,13 +67,17 @@ import { useAuthStore } from "../stores/authStore";
 import { useRouter } from "vue-router";
 import { showToast } from "../services/notificationService";
 import { PASSWORD_HINT } from "../services/passwordService";
+import { getApiErrorMessage } from "../services/apiErrorService";
 
 const email = ref("");
 const password = ref("");
+const isSubmitting = ref(false);
 const auth = useAuthStore();
 const router = useRouter();
 
 async function login() {
+  if (isSubmitting.value) return;
+
   const emailValue = email.value.trim();
   const passwordValue = password.value;
 
@@ -152,19 +86,78 @@ async function login() {
     return;
   }
 
-  const success = await auth.login(emailValue, passwordValue);
+  try {
+    isSubmitting.value = true;
+    const success = await auth.login(emailValue, passwordValue);
 
-  if (!success) {
-    showToast("Неверные данные");
-    return;
+    if (!success) {
+      showToast("Неверные данные");
+      return;
+    }
+
+    showToast("Успешный вход!");
+    router.push("/");
+  } catch (error) {
+    showToast(getApiErrorMessage(error, "Не удалось выполнить вход"));
+    console.error("login error:", error);
+  } finally {
+    isSubmitting.value = false;
   }
-
-  showToast("Успешный вход!");
-  router.push("/");
 }
 </script>
 
 <style scoped>
+.auth-page {
+  min-height: calc(100vh - 140px);
+  background-color: var(--background-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 15px;
+}
+
+.auth-card {
+  max-width: 400px;
+  width: 100%;
+  background-color: var(--card-background-color);
+  border-radius: 16px;
+  padding: 40px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--border-color);
+}
+
+.auth-title {
+  font-family: "Poppins", sans-serif;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-color);
+  text-align: center;
+  margin: 0 0 10px;
+}
+
+.auth-subtitle {
+  font-family: "Roboto", sans-serif;
+  color: var(--light-text-color);
+  text-align: center;
+  margin: 0 0 30px;
+  font-size: 0.95rem;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.auth-label {
+  display: block;
+  font-family: "Roboto", sans-serif;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-color);
+  margin-bottom: 6px;
+}
+
 .auth-input {
   width: 100%;
   padding: 12px 14px;
@@ -206,6 +199,26 @@ async function login() {
 
 .auth-button:active {
   transform: translateY(0);
+}
+
+.auth-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+  transform: none;
+  box-shadow: none;
+}
+
+.auth-footer {
+  text-align: center;
+  margin-top: 20px;
+  font-family: "Roboto", sans-serif;
+  color: var(--light-text-color);
+  font-size: 0.9rem;
+}
+
+.auth-footer--forgot {
+  margin-top: 15px;
+  font-size: 0.85rem;
 }
 
 .auth-link {

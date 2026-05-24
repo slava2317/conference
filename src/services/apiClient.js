@@ -1,5 +1,7 @@
-const DEFAULT_API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
-const AUTH_TOKEN_KEY = "authToken";
+const DEFAULT_API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
+const AUTH_TOKEN_KEY = "token";
+const LEGACY_AUTH_TOKEN_KEY = "authToken";
+const CURRENT_USER_KEY = "currentUser";
 
 export function isApiConfigured() {
   return Boolean(DEFAULT_API_BASE_URL);
@@ -9,18 +11,48 @@ export function getApiBaseUrl() {
   return DEFAULT_API_BASE_URL.replace(/\/$/, "");
 }
 
-function buildUrl(path) {
-  const baseUrl = getApiBaseUrl();
-  if (!baseUrl) {
-    return path;
+export function normalizeApiPath(path) {
+  if (!path) return path;
+
+  try {
+    const parsed = new URL(path, window.location.origin);
+    if (parsed.origin) {
+      return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    }
+  } catch (error) {
+    // Relative paths and invalid URLs should fall through unchanged.
   }
 
-  return `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
+  return path;
+}
+
+function buildUrl(path) {
+  const baseUrl = getApiBaseUrl();
+  const normalizedPath = normalizeApiPath(path);
+
+  if (!baseUrl) {
+    return normalizedPath;
+  }
+
+  if (
+    normalizedPath === baseUrl ||
+    normalizedPath.startsWith(`${baseUrl}/`)
+  ) {
+    return normalizedPath;
+  }
+
+  return `${baseUrl}${
+    normalizedPath.startsWith("/") ? normalizedPath : `/${normalizedPath}`
+  }`;
 }
 
 export function getStoredAuthToken() {
   try {
-    return localStorage.getItem(AUTH_TOKEN_KEY) || "";
+    return (
+      localStorage.getItem(AUTH_TOKEN_KEY) ||
+      localStorage.getItem(LEGACY_AUTH_TOKEN_KEY) ||
+      ""
+    );
   } catch (error) {
     console.error("getStoredAuthToken error:", error);
     return "";
@@ -31,10 +63,12 @@ export function setStoredAuthToken(token) {
   try {
     if (!token) {
       localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
       return;
     }
 
     localStorage.setItem(AUTH_TOKEN_KEY, token);
+    localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
   } catch (error) {
     console.error("setStoredAuthToken error:", error);
   }
@@ -42,6 +76,17 @@ export function setStoredAuthToken(token) {
 
 export function clearStoredAuthToken() {
   setStoredAuthToken("");
+}
+
+function clearStoredAuthSession() {
+  clearStoredAuthToken();
+
+  try {
+    localStorage.removeItem(CURRENT_USER_KEY);
+    localStorage.removeItem("user");
+  } catch (error) {
+    console.error("clearStoredAuthSession error:", error);
+  }
 }
 
 async function parseResponse(response) {
@@ -75,6 +120,10 @@ export async function apiRequest(path, options = {}) {
   const isFormData =
     typeof FormData !== "undefined" && body instanceof FormData;
 
+  if (!requestHeaders.Accept) {
+    requestHeaders.Accept = "application/json";
+  }
+
   if (auth) {
     const token = getStoredAuthToken();
     if (token) {
@@ -95,7 +144,7 @@ export async function apiRequest(path, options = {}) {
       requestHeaders["Content-Type"] === "application/json"
         ? JSON.stringify(body)
         : body,
-    credentials: "include",
+    credentials: "omit",
     signal,
   });
 
@@ -109,6 +158,11 @@ export async function apiRequest(path, options = {}) {
     error.status = response.status;
     error.errors = payload?.errors || null;
     error.payload = payload;
+
+    if (response.status === 401) {
+      clearStoredAuthSession();
+    }
+
     throw error;
   }
 

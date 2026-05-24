@@ -4,22 +4,21 @@ import { useRouter } from "vue-router";
 import { useAuthStore } from "../stores/authStore";
 import { useConferenceStore } from "../stores/conferenceStore";
 import { useFileStore } from "../stores/fileStore";
-import { useSpeakerStore } from "../stores/speakerStore";
 import { showToast } from "../services/notificationService";
-import {
-  readFileAsDataURL,
-  validateSpeakerPhotoFile,
-} from "../services/speakerPhotoService";
 import SelectDropdown from "../components/SelectDropdown.vue";
 import { CONFERENCE_TOPICS_ARRAY } from "../constants/topics";
+import { getApiErrorMessage } from "../services/apiErrorService";
+import { getApplicationDictionaries } from "../services/applicationDictionaryService";
 
 const auth = useAuthStore();
 const router = useRouter();
 const conferenceStore = useConferenceStore();
 const fileStore = useFileStore();
-const speakerStore = useSpeakerStore();
-const selectedFileNames = ref([]);
-const selectedSpeakerId = ref("new");
+const selectedFileIds = ref([]);
+const sections = ref([]);
+const sectionsByTopic = ref({});
+const isLoadingSections = ref(false);
+const sectionsError = ref("");
 
 // Проверка авторизации при загрузке
 if (!auth.isAuthenticated) {
@@ -30,19 +29,11 @@ if (!auth.isAuthenticated) {
 onMounted(() => {
   if (auth.isAuthenticated) {
     fileStore.loadFiles();
+    loadSections();
   }
-  speakerStore.loadSpeakers();
 });
 
 const availableFiles = computed(() => fileStore.files);
-const speakerOptions = computed(() => [
-  { value: "new", label: "Новый спикер" },
-  ...speakerStore.speakers.map((speaker) => ({
-    value: speaker.id,
-    label: `${speaker.firstName} ${speaker.lastName}`,
-    searchText: `${speaker.firstName} ${speaker.lastName} ${speaker.email}`,
-  })),
-]);
 
 // Форма конференции
 const formData = ref({
@@ -51,66 +42,8 @@ const formData = ref({
   topic: "technology",
   date: "",
   time: "",
-  speaker: {
-    firstName: "",
-    lastName: "",
-    bio: "",
-    email: "",
-    photo: "",
-  },
+  sectionIds: [],
 });
-
-async function handleSpeakerPhotoUpload(event) {
-  const file = event.target.files?.[0];
-  if (!file) return;
-
-  const photoError = validateSpeakerPhotoFile(file);
-  if (photoError) {
-    showToast(photoError);
-    event.target.value = "";
-    return;
-  }
-
-  try {
-    formData.value.speaker.photo = await readFileAsDataURL(file);
-  } catch (error) {
-    console.error(error);
-    showToast("Не удалось загрузить фото спикера");
-    event.target.value = "";
-  }
-}
-
-function applySelectedSpeaker(speakerId) {
-  if (speakerId === "new") {
-    formData.value.speaker = {
-      firstName: "",
-      lastName: "",
-      bio: "",
-      email: "",
-      photo: "",
-    };
-    return;
-  }
-
-  const selectedSpeaker = speakerStore.getSpeakerById(speakerId);
-  if (!selectedSpeaker) return;
-
-  formData.value.speaker = {
-    firstName: selectedSpeaker.firstName,
-    lastName: selectedSpeaker.lastName,
-    bio: selectedSpeaker.bio || "",
-    email: selectedSpeaker.email,
-    photo: selectedSpeaker.photo || "",
-  };
-}
-
-watch(
-  selectedSpeakerId,
-  (speakerId) => {
-    applySelectedSpeaker(speakerId);
-  },
-  { immediate: true },
-);
 
 function formatFileSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -118,29 +51,114 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function getFileSelectionId(file) {
+  return String(file?.id || file?.contentId || file?.file_id || "");
+}
+
+function getFileKey(file, index) {
+  return getFileSelectionId(file) || `${file?.name || "file"}-${index}`;
+}
+
 const topics = CONFERENCE_TOPICS_ARRAY;
+const availableSections = computed(() =>
+  getSectionsForTopic(formData.value.topic),
+);
+
+watch(
+  () => formData.value.topic,
+  () => {
+    formData.value.sectionIds = [];
+  },
+);
 
 function isFormValid() {
-  return (
+  return Boolean(
     formData.value.name.trim() &&
-    formData.value.description.trim() &&
-    formData.value.date &&
-    formData.value.time &&
-    formData.value.speaker.firstName.trim() &&
-    formData.value.speaker.lastName.trim() &&
-    formData.value.speaker.email.trim()
+      formData.value.description.trim() &&
+      formData.value.date &&
+      formData.value.time &&
+      formData.value.sectionIds.length > 0,
   );
 }
 
-function toggleFileSelection(fileName) {
-  if (selectedFileNames.value.includes(fileName)) {
-    selectedFileNames.value = selectedFileNames.value.filter(
-      (name) => name !== fileName,
+async function loadSections() {
+  isLoadingSections.value = true;
+  sectionsError.value = "";
+
+  try {
+    const dictionary = await getApplicationDictionaries();
+    sections.value = dictionary.sections || [];
+    sectionsByTopic.value = dictionary.sectionsByTopic || {};
+  } catch (error) {
+    sectionsError.value = getApiErrorMessage(
+      error,
+      "Не удалось загрузить секции",
+    );
+  } finally {
+    isLoadingSections.value = false;
+  }
+}
+
+function getSectionsForTopic(topic) {
+  const topicKey = String(topic || "").trim();
+
+  if (
+    topicKey &&
+    Object.prototype.hasOwnProperty.call(sectionsByTopic.value, topicKey)
+  ) {
+    return sectionsByTopic.value[topicKey] || [];
+  }
+
+  return sections.value;
+}
+
+function hasSectionValidationError(error) {
+  const errors = error?.errors || error?.payload?.errors || {};
+  return Object.keys(errors).some((field) =>
+    String(field).toLowerCase().includes("section"),
+  );
+}
+
+function isConferenceDateInFuture() {
+  if (!formData.value.date || !formData.value.time) {
+    return false;
+  }
+
+  const conferenceDate = new Date(
+    `${formData.value.date}T${formData.value.time}:00`,
+  );
+
+  if (Number.isNaN(conferenceDate.getTime())) {
+    return false;
+  }
+
+  return conferenceDate.getTime() > Date.now();
+}
+
+function toggleFileSelection(file) {
+  const fileId = getFileSelectionId(file);
+  if (!fileId) return;
+
+  if (selectedFileIds.value.includes(fileId)) {
+    selectedFileIds.value = selectedFileIds.value.filter((id) => id !== fileId);
+    return;
+  }
+
+  selectedFileIds.value = [...selectedFileIds.value, fileId];
+}
+
+function toggleSectionSelection(sectionId) {
+  const numericId = Number(sectionId);
+  const value = Number.isFinite(numericId) ? numericId : sectionId;
+
+  if (formData.value.sectionIds.some((id) => String(id) === String(value))) {
+    formData.value.sectionIds = formData.value.sectionIds.filter(
+      (id) => String(id) !== String(value),
     );
     return;
   }
 
-  selectedFileNames.value = [...selectedFileNames.value, fileName];
+  formData.value.sectionIds = [...formData.value.sectionIds, value];
 }
 
 async function submitConference() {
@@ -149,23 +167,18 @@ async function submitConference() {
     return;
   }
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(formData.value.speaker.email)) {
-    showToast("Введите корректный email спикера");
+  if (!isConferenceDateInFuture()) {
+    showToast("Дата и время конференции должны быть в будущем");
     return;
   }
 
   try {
-    const currentUserEmail =
-      typeof auth.user === "string" ? auth.user : auth.user?.email || "";
-    const currentUserIdentifier =
-      typeof auth.user === "string"
-        ? auth.user
-        : auth.user?.id || auth.user?.participantId || auth.user?.email || "";
-
     const selectedFiles = fileStore.files.filter((file) =>
-      selectedFileNames.value.includes(file.name),
+      selectedFileIds.value.includes(getFileSelectionId(file)),
     );
+    const usedFileIds = selectedFiles
+      .map((file) => file.id || file.contentId || file.file_id)
+      .filter(Boolean);
     const missingContentFile = selectedFiles.find(
       (file) => !file.contentId && !file.content,
     );
@@ -176,26 +189,18 @@ async function submitConference() {
       return;
     }
 
-    const createdConference = await conferenceStore.addConference({
+    const conferencePayload = {
       name: formData.value.name,
       description: formData.value.description,
       topic: formData.value.topic,
       date: formData.value.date,
       time: formData.value.time,
-      speaker: {
-        ...formData.value.speaker,
-        createdBy: currentUserEmail,
-      },
-      usedFiles: selectedFiles.map((file) => ({
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        date: file.date,
-        contentId: file.contentId,
-        sourceUserEmail: currentUserEmail,
-      })),
-      createdBy: currentUserIdentifier,
-    });
+      sectionIds: formData.value.sectionIds,
+      usedFileIds,
+    };
+
+    const createdConference =
+      await conferenceStore.addConference(conferencePayload);
 
     if (!createdConference) {
       showToast("Не удалось создать конференцию: хранилище переполнено");
@@ -205,7 +210,18 @@ async function submitConference() {
     showToast("Конференция успешно создана!");
     router.push("/");
   } catch (error) {
-    showToast("Ошибка при создании конференции");
+    if (Number(error?.status || 0) === 403) {
+      showToast(
+        "Недостаточно прав. Создавать и удалять конференции может только администратор.",
+      );
+    } else if (
+      Number(error?.status || 0) === 422 &&
+      hasSectionValidationError(error)
+    ) {
+      showToast("Выбранная секция не относится к выбранной теме");
+    } else {
+      showToast(getApiErrorMessage(error, "Ошибка при создании конференции"));
+    }
     console.error(error);
   }
 }
@@ -253,6 +269,44 @@ async function submitConference() {
             ></textarea>
           </div>
 
+          <div class="form-group">
+            <label class="form-label">Секции конференции</label>
+            <p class="form-help">
+              Выберите одну или несколько секций, доступных для заявок.
+            </p>
+
+            <p v-if="isLoadingSections" class="form-help">
+              Загружаем секции...
+            </p>
+
+            <div
+              v-else-if="availableSections.length > 0"
+              class="sections-select-list"
+            >
+              <label
+                v-for="section in availableSections"
+                :key="section.id"
+                class="section-select-item"
+              >
+                <input
+                  type="checkbox"
+                  :value="section.id"
+                  :checked="
+                    formData.sectionIds.some(
+                      (sectionId) => String(sectionId) === String(section.id),
+                    )
+                  "
+                  @change="toggleSectionSelection(section.id)"
+                />
+                <span class="section-select-name">{{ section.name }}</span>
+              </label>
+            </div>
+
+            <p v-else class="form-help form-help--error">
+              {{ sectionsError || "Секции пока не настроены." }}
+            </p>
+          </div>
+
           <!-- Материалы конференции -->
           <div class="form-group">
             <label class="form-label">Материалы конференции</label>
@@ -263,15 +317,15 @@ async function submitConference() {
 
             <div v-if="availableFiles.length > 0" class="files-select-list">
               <label
-                v-for="file in availableFiles"
-                :key="file.name"
+                v-for="(file, index) in availableFiles"
+                :key="getFileKey(file, index)"
                 class="file-select-item"
               >
                 <input
                   type="checkbox"
-                  :value="file.name"
-                  :checked="selectedFileNames.includes(file.name)"
-                  @change="toggleFileSelection(file.name)"
+                  :value="getFileSelectionId(file)"
+                  :checked="selectedFileIds.includes(getFileSelectionId(file))"
+                  @change="toggleFileSelection(file)"
                 />
                 <span class="file-select-name">{{ file.name }}</span>
                 <span class="file-select-meta">{{
@@ -298,95 +352,6 @@ async function submitConference() {
             </div>
           </div>
         </form>
-      </div>
-
-      <!-- Информация о спикере -->
-      <div class="card">
-        <h2 class="section-title">Информация о спикере</h2>
-
-        <div class="form">
-          <!-- Выбор спикера -->
-          <div class="form-group">
-            <label class="form-label">Спикер</label>
-            <SelectDropdown
-              v-model="selectedSpeakerId"
-              :options="speakerOptions"
-              label="Выберите спикера"
-              searchable
-            />
-            <p class="form-help">
-              Можно выбрать уже созданного спикера или оставить "Новый спикер".
-            </p>
-          </div>
-
-          <!-- Имя спикера -->
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Имя</label>
-              <input
-                v-model="formData.speaker.firstName"
-                type="text"
-                placeholder="Введите имя спикера"
-                class="form-input"
-              />
-            </div>
-            <div class="form-group">
-              <label class="form-label">Фамилия</label>
-              <input
-                v-model="formData.speaker.lastName"
-                type="text"
-                placeholder="Введите фамилию спикера"
-                class="form-input"
-              />
-            </div>
-          </div>
-
-          <!-- Email спикера -->
-          <div class="form-group">
-            <label class="form-label">Email спикера</label>
-            <input
-              v-model="formData.speaker.email"
-              type="email"
-              placeholder="speaker@example.com"
-              class="form-input"
-            />
-          </div>
-
-          <!-- Фото спикера -->
-          <div class="form-group">
-            <label class="form-label">Фото спикера</label>
-            <div class="photo-upload">
-              <div
-                class="photo-preview"
-                :class="{ 'photo-preview--empty': !formData.speaker.photo }"
-              >
-                <img
-                  v-if="formData.speaker.photo"
-                  :src="formData.speaker.photo"
-                  alt="Фото спикера"
-                />
-                <span v-else>Нет фото</span>
-              </div>
-              <input
-                type="file"
-                accept="image/*"
-                class="photo-input"
-                @change="handleSpeakerPhotoUpload"
-              />
-            </div>
-          </div>
-
-          <!-- Биография спикера -->
-          <div class="form-group">
-            <label class="form-label">Биография спикера</label>
-            <textarea
-              v-model="formData.speaker.bio"
-              placeholder="Расскажите о спикере (опционально)"
-              class="form-textarea"
-              rows="3"
-            ></textarea>
-          </div>
-        </div>
       </div>
 
       <!-- Кнопки действия -->
@@ -520,6 +485,13 @@ async function submitConference() {
   gap: 10px;
 }
 
+.sections-select-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.section-select-item,
 .file-select-item {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -532,14 +504,24 @@ async function submitConference() {
   cursor: pointer;
 }
 
+.section-select-item {
+  grid-template-columns: auto 1fr;
+}
+
+.section-select-item input,
 .file-select-item input {
   margin: 0;
 }
 
+.section-select-name,
 .file-select-name {
   font-family: "Roboto", sans-serif;
   color: var(--text-color);
   word-break: break-word;
+}
+
+.form-help--error {
+  color: #dc2626;
 }
 
 .file-select-meta {
@@ -547,106 +529,6 @@ async function submitConference() {
   color: var(--light-text-color);
   font-size: 0.8rem;
   white-space: nowrap;
-}
-
-.photo-upload {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
-.photo-preview {
-  width: 84px;
-  height: 84px;
-  border-radius: 50%;
-  overflow: hidden;
-  border: 2px solid var(--border-color);
-  background-color: rgba(74, 105, 226, 0.08);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--light-text-color);
-  font-family: "Roboto", sans-serif;
-  font-size: 0.8rem;
-  flex-shrink: 0;
-}
-
-.photo-preview--empty {
-  padding: 8px;
-  text-align: center;
-}
-
-.photo-preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.photo-input {
-  font-family: "Roboto", sans-serif;
-  font-size: 0.9rem;
-  color: var(--text-color);
-  width: 100%;
-  max-width: 320px;
-  background: transparent;
-  border: none;
-  padding: 0;
-}
-
-.photo-input::file-selector-button,
-.photo-input::-webkit-file-upload-button {
-  margin-right: 12px;
-  padding: 10px 16px;
-  border: 1px solid rgba(74, 105, 226, 0.35);
-  border-radius: 999px;
-  background: linear-gradient(
-    135deg,
-    rgba(74, 105, 226, 0.16),
-    rgba(74, 105, 226, 0.08)
-  );
-  color: var(--text-color);
-  font-family: "Poppins", sans-serif;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease,
-    background 0.2s ease;
-}
-
-.photo-input::file-selector-button:hover,
-.photo-input::-webkit-file-upload-button:hover {
-  transform: translateY(-1px);
-  background: linear-gradient(
-    135deg,
-    rgba(74, 105, 226, 0.22),
-    rgba(74, 105, 226, 0.12)
-  );
-  box-shadow: 0 6px 16px rgba(74, 105, 226, 0.18);
-}
-
-:global(html[data-theme="dark"]) .photo-input::file-selector-button,
-:global(html[data-theme="dark"]) .photo-input::-webkit-file-upload-button {
-  border-color: rgba(234, 234, 234, 0.2);
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.08),
-    rgba(255, 255, 255, 0.04)
-  );
-  color: var(--text-color);
-}
-
-:global(html[data-theme="dark"]) .photo-input::file-selector-button:hover,
-:global(html[data-theme="dark"])
-  .photo-input::-webkit-file-upload-button:hover {
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.13),
-    rgba(255, 255, 255, 0.07)
-  );
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
 }
 
 .action-buttons {
@@ -698,6 +580,10 @@ async function submitConference() {
 
   .action-buttons {
     flex-direction: column;
+  }
+
+  .sections-select-list {
+    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -2,6 +2,7 @@ import { getJSON, setJSON, remove } from "./storageService";
 import {
   apiRequestJSON,
   clearStoredAuthToken,
+  getStoredAuthToken,
   isApiConfigured,
   setStoredAuthToken,
 } from "./apiClient";
@@ -30,9 +31,32 @@ function persistCurrentUser(user) {
   return normalizedUser;
 }
 
+function getResponseToken(response) {
+  return (
+    response?.token ||
+    response?.access_token ||
+    response?.accessToken ||
+    response?.bearer_token ||
+    response?.data?.token ||
+    response?.data?.access_token ||
+    response?.data?.accessToken ||
+    ""
+  );
+}
+
+function getResponseUser(response, fallback = null) {
+  return (
+    response?.user ||
+    response?.profile ||
+    response?.data?.user ||
+    response?.data?.profile ||
+    fallback
+  );
+}
+
 export async function registerUser(user) {
   if (isApiConfigured()) {
-    const response = await apiRequestJSON("/api/register", {
+    const response = await apiRequestJSON("/register", {
       method: "POST",
       auth: false,
       body: {
@@ -43,12 +67,14 @@ export async function registerUser(user) {
       },
     });
 
-    if (response?.token) {
-      setStoredAuthToken(response.token);
+    const token = getResponseToken(response);
+    if (token) {
+      setStoredAuthToken(token);
     }
 
-    if (response?.user) {
-      persistCurrentUser(response.user);
+    const userRecord = getResponseUser(response);
+    if (userRecord) {
+      persistCurrentUser(userRecord);
     }
 
     return true;
@@ -72,19 +98,18 @@ export function findUser(email, password) {
 
 export async function loginUser(email, password) {
   if (isApiConfigured()) {
-    const response = await apiRequestJSON("/api/login", {
+    const response = await apiRequestJSON("/login", {
       method: "POST",
       auth: false,
       body: { email, password },
     });
 
-    if (response?.token) {
-      setStoredAuthToken(response.token);
+    const token = getResponseToken(response);
+    if (token) {
+      setStoredAuthToken(token);
     }
 
-    const user = normalizeUser(
-      response?.user || response?.profile || { email },
-    );
+    const user = normalizeUser(getResponseUser(response, { email }));
     persistCurrentUser(user);
     return user;
   }
@@ -99,19 +124,26 @@ export async function loginUser(email, password) {
 }
 
 export function getCurrentUser() {
+  if (isApiConfigured() && !getStoredAuthToken()) {
+    remove(CURRENT_USER_KEY);
+    return null;
+  }
+
   return getJSON(CURRENT_USER_KEY, null);
 }
 
 export async function fetchCurrentUser() {
-  const cachedUser = getCurrentUser();
-  if (cachedUser) return normalizeUser(cachedUser);
-
   if (!isApiConfigured()) {
+    return getJSON(CURRENT_USER_KEY, null);
+  }
+
+  if (!getStoredAuthToken()) {
+    remove(CURRENT_USER_KEY);
     return null;
   }
 
   try {
-    const response = await apiRequestJSON("/api/profile", { method: "GET" });
+    const response = await apiRequestJSON("/profile", { method: "GET" });
     if (response?.user || response?.profile || response) {
       const user = normalizeUser(response.user || response.profile || response);
       persistCurrentUser(user);
@@ -119,18 +151,19 @@ export async function fetchCurrentUser() {
     }
   } catch (error) {
     if (error?.status === 401) {
+      remove(CURRENT_USER_KEY);
       return null;
     }
     console.error("fetchCurrentUser error:", error);
   }
 
-  return null;
+  return normalizeUser(getJSON(CURRENT_USER_KEY, null));
 }
 
 export async function logoutUser() {
   if (isApiConfigured()) {
     try {
-      await apiRequestJSON("/api/logout", { method: "POST" });
+      await apiRequestJSON("/logout", { method: "POST" });
     } catch (error) {
       console.error("logoutUser error:", error);
     }
@@ -145,7 +178,7 @@ export async function changePasswordOnServer(currentPassword, newPassword) {
     return false;
   }
 
-  await apiRequestJSON("/api/password", {
+  await apiRequestJSON("/password", {
     method: "PATCH",
     body: {
       currentPassword,
@@ -162,7 +195,7 @@ export async function deleteAccountOnServer() {
     return false;
   }
 
-  await apiRequestJSON("/api/account", { method: "DELETE" });
+  await apiRequestJSON("/account", { method: "DELETE" });
   await logoutUser();
   return true;
 }

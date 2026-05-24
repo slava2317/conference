@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from "vue";
 import { useAuthStore } from "../stores/authStore";
 import { useThemeStore } from "../stores/themeStore";
 import { useRouter } from "vue-router";
@@ -6,6 +7,12 @@ import { useRouter } from "vue-router";
 const auth = useAuthStore();
 const theme = useThemeStore();
 const router = useRouter();
+const canShowReviews = computed(
+  () => auth.user?.reviewerStatus === "approved",
+);
+const canShowReportReviews = computed(
+  () => auth.isAuthenticated && !auth.isAdmin,
+);
 async function goToAbout() {
   if (router.currentRoute.value.path !== "/") {
     await router.push("/#about");
@@ -36,9 +43,6 @@ function logout() {
         <router-link to="/conferences" class="nav-link"
           >Конференции</router-link
         >
-        <router-link v-if="auth.isAuthenticated" to="/speakers" class="nav-link"
-          >Спикеры</router-link
-        >
       </div>
 
       <div class="nav-right">
@@ -59,10 +63,23 @@ function logout() {
         </template>
 
         <template v-else>
-          <router-link to="/create-conference" class="nav-link"
+          <router-link v-if="auth.isAdmin" to="/create-conference" class="nav-link"
             >Создать конференцию</router-link
           >
           <router-link to="/upload" class="nav-link">Материалы</router-link>
+          <router-link v-if="canShowReviews" to="/reviews" class="nav-link">
+            Рецензии
+          </router-link>
+          <router-link
+            v-if="canShowReportReviews"
+            to="/report-reviews"
+            class="nav-link"
+          >
+            Рецензии на доклады
+          </router-link>
+          <router-link v-if="auth.isAdmin" to="/admin" class="nav-link">
+            Админ
+          </router-link>
           <router-link to="/profile" class="nav-link">Профиль</router-link>
           <button class="btn btn-primary" @click="logout">Выход</button>
         </template>

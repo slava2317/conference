@@ -63,6 +63,35 @@ function compactDisplayName(value) {
   return collapsed.join(" ").trim();
 }
 
+function getConferenceSpeakers(conference) {
+  const speakers = Array.isArray(conference?.speakers)
+    ? conference.speakers.filter(Boolean)
+    : [];
+
+  if (speakers.length > 0) return speakers;
+  return conference?.speaker ? [conference.speaker] : [];
+}
+
+function getSpeakerDisplayName(speaker) {
+  if (!speaker) return "";
+
+  const explicitName = compactDisplayName(speaker.name);
+  if (explicitName) return explicitName;
+
+  const firstName = compactDisplayName(speaker.firstName);
+  const lastName = compactDisplayName(speaker.lastName);
+  const fullName = `${firstName} ${lastName}`.trim();
+
+  return fullName || compactDisplayName(speaker.email);
+}
+
+function getConferenceSpeakersLabel(conference) {
+  const speakers = getConferenceSpeakers(conference);
+  if (speakers.length === 0) return "—";
+
+  return speakers.map(getSpeakerDisplayName).filter(Boolean).join(", ") || "—";
+}
+
 function getConferenceCreatorLabel(conference) {
   if (!conference?.createdBy) return "—";
 
@@ -163,10 +192,9 @@ function openTopicConferences(topic) {
             </div>
 
             <div class="nearest-item">
-              <span class="nearest-label">Спикер</span>
+              <span class="nearest-label">Спикеры</span>
               <span class="nearest-value">
-                {{ nearestConference.speaker?.firstName || "—" }}
-                {{ nearestConference.speaker?.lastName || "" }}
+                {{ getConferenceSpeakersLabel(nearestConference) }}
               </span>
             </div>
 

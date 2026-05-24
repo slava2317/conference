@@ -1,7 +1,14 @@
 import { defineStore } from "pinia";
 import * as storageService from "../services/storageService";
-import { apiRequestJSON, isApiConfigured } from "../services/apiClient";
+import * as applicationService from "../services/applicationService";
+import { useAuthStore } from "./authStore";
 import {
+  apiRequestJSON,
+  getStoredAuthToken,
+  isApiConfigured,
+} from "../services/apiClient";
+import {
+  normalizeApplicationRecord,
   normalizeConferenceRecord,
   toConferencePayload,
 } from "../services/apiSchema";
@@ -19,32 +26,129 @@ function isConferenceInFuture(conference, now = new Date()) {
   return conferenceDate.getTime() > now.getTime();
 }
 
+function buildConferenceQuery(filters = {}) {
+  const params = new URLSearchParams();
+
+  if (filters.topic && filters.topic !== "all") {
+    params.set("topic", String(filters.topic));
+  }
+
+  if (filters.sectionId && filters.sectionId !== "all") {
+    params.set("sectionId", String(filters.sectionId));
+  }
+
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
+function applyLocalConferenceFilters(conferences, filters = {}) {
+  return conferences.filter((conference) => {
+    const matchesTopic =
+      !filters.topic ||
+      filters.topic === "all" ||
+      conference?.topic === filters.topic;
+    const matchesSection =
+      !filters.sectionId ||
+      filters.sectionId === "all" ||
+      (conference?.sections || []).some(
+        (section) => String(section?.id) === String(filters.sectionId),
+      );
+
+    return matchesTopic && matchesSection;
+  });
+}
+
+function getApplicationKey(application) {
+  return String(
+    application?.id ||
+      `${application?.type || ""}|${application?.conferenceId || ""}|${
+        application?.sectionId || ""
+      }|${application?.status || ""}`,
+  );
+}
+
+function mergeApplications(currentApplications = [], nextApplications = []) {
+  const merged = [...currentApplications];
+  const knownKeys = new Set(merged.map(getApplicationKey));
+
+  nextApplications.forEach((application) => {
+    const key = getApplicationKey(application);
+    if (!key || knownKeys.has(key)) return;
+
+    knownKeys.add(key);
+    merged.push(application);
+  });
+
+  return merged;
+}
+
+function extractProfileApplications(user) {
+  if (!user || typeof user !== "object") return [];
+
+  const participation = user.participation || {};
+  return [
+    ...(Array.isArray(user.speakerApplications)
+      ? user.speakerApplications
+      : []),
+    ...(Array.isArray(user.reviewerApplications)
+      ? user.reviewerApplications
+      : []),
+    ...(Array.isArray(participation.speaker?.applications)
+      ? participation.speaker.applications
+      : []),
+    ...(Array.isArray(participation.reviewer?.applications)
+      ? participation.reviewer.applications
+      : []),
+  ]
+    .map(normalizeApplicationRecord)
+    .filter((application) => application && typeof application === "object");
+}
+
 export const useConferenceStore = defineStore("conference", {
   state: () => ({
-    conferences: storageService
-      .getJSON("conferences", [])
-      .map(normalizeConferenceRecord),
+    conferences: isApiConfigured()
+      ? []
+      : storageService.getJSON("conferences", []).map(normalizeConferenceRecord),
     isLoading: false,
+    isLoadingApplications: false,
+    applicationsByConferenceId: {},
   }),
 
   actions: {
-    async loadConferences() {
+    async loadConferences(filters = {}) {
       if (!isApiConfigured()) {
         this.conferences = storageService
           .getJSON("conferences", [])
           .map(normalizeConferenceRecord);
+        this.conferences = applyLocalConferenceFilters(this.conferences, filters);
+        return this.conferences;
+      }
+
+      if (!getStoredAuthToken()) {
+        this.conferences = [];
+        this.applicationsByConferenceId = {};
         return this.conferences;
       }
 
       this.isLoading = true;
       try {
-        const response = await apiRequestJSON("/api/conferences", {
-          method: "GET",
-        });
+        const response = await apiRequestJSON(
+          `/conferences${buildConferenceQuery(filters)}`,
+          {
+            method: "GET",
+          },
+        );
         const conferences = Array.isArray(response)
           ? response
           : response?.data || response?.conferences || [];
         this.conferences = conferences.map(normalizeConferenceRecord);
+        this.hydrateEmbeddedApplications();
+        return this.conferences;
+      } catch (error) {
+        if (![401, 403].includes(Number(error?.status || 0))) {
+          console.error("loadConferences error:", error);
+        }
+        this.conferences = [];
         return this.conferences;
       } finally {
         this.isLoading = false;
@@ -53,14 +157,15 @@ export const useConferenceStore = defineStore("conference", {
 
     async addConference(conference) {
       const payload = toConferencePayload(conference);
+      console.log("create conference payload", payload);
 
       if (isApiConfigured()) {
-        const response = await apiRequestJSON("/api/conferences", {
+        const response = await apiRequestJSON("/conferences", {
           method: "POST",
           body: payload,
         });
         const createdConference = normalizeConferenceRecord(
-          response?.data || response,
+          response?.data || response?.conference || response,
         );
         this.conferences = [...this.conferences, createdConference];
         return createdConference;
@@ -94,12 +199,140 @@ export const useConferenceStore = defineStore("conference", {
     },
 
     getConferenceById(id) {
-      return this.conferences.find((conf) => conf.id === id);
+      return this.conferences.find((conf) => String(conf.id) === String(id));
+    },
+
+    hydrateEmbeddedApplications() {
+      const nextApplications = { ...this.applicationsByConferenceId };
+
+      this.conferences.forEach((conference) => {
+        const applications =
+          applicationService.extractEmbeddedConferenceApplications(conference);
+        if (applications.length > 0) {
+          nextApplications[String(conference.id)] = applications;
+        }
+      });
+
+      this.applicationsByConferenceId = nextApplications;
+    },
+
+    hydrateProfileApplications(user) {
+      const profileApplications = extractProfileApplications(user);
+      if (profileApplications.length === 0) return;
+
+      const nextApplications = { ...this.applicationsByConferenceId };
+      profileApplications.forEach((application) => {
+        const conferenceId =
+          application?.conferenceId || application?.conference?.id || null;
+        if (!conferenceId) return;
+
+        const key = String(conferenceId);
+        nextApplications[key] = mergeApplications(nextApplications[key], [
+          application,
+        ]);
+      });
+
+      this.applicationsByConferenceId = nextApplications;
+    },
+
+    getApplicationsByConferenceId(id) {
+      const key = String(id);
+      const fromStore = this.applicationsByConferenceId[key];
+      if (Array.isArray(fromStore)) return fromStore;
+
+      const conference = this.getConferenceById(id);
+      return applicationService.extractEmbeddedConferenceApplications(
+        conference,
+      );
+    },
+
+    async loadApplicationsForConference(id) {
+      if (!isApiConfigured() || !id) {
+        return this.getApplicationsByConferenceId(id);
+      }
+
+      const key = String(id);
+      const authStore = useAuthStore();
+      this.hydrateEmbeddedApplications();
+      this.hydrateProfileApplications(authStore.user);
+
+      const cachedApplications = this.getApplicationsByConferenceId(id);
+      if (cachedApplications.length > 0) {
+        return cachedApplications;
+      }
+
+      try {
+        const loadedConference = await this.loadConference(id);
+        const applications =
+          applicationService.extractEmbeddedConferenceApplications(
+            loadedConference,
+          );
+        this.applicationsByConferenceId = {
+          ...this.applicationsByConferenceId,
+          [key]: applications,
+        };
+        return applications;
+      } catch (error) {
+        const fallbackApplications = this.getApplicationsByConferenceId(id);
+        this.applicationsByConferenceId = {
+          ...this.applicationsByConferenceId,
+          [key]: fallbackApplications,
+        };
+        if (![403, 404, 405].includes(Number(error?.status || 0))) {
+          console.error("loadApplicationsForConference error:", error);
+        }
+        return fallbackApplications;
+      }
+    },
+
+    async loadConference(id) {
+      if (!id) return null;
+
+      if (!isApiConfigured()) {
+        return this.getConferenceById(id) || null;
+      }
+
+      const response = await apiRequestJSON(
+        `/conferences/${encodeURIComponent(id)}`,
+        { method: "GET" },
+      );
+      const normalizedConference = normalizeConferenceRecord(
+        response?.data || response?.conference || response,
+      );
+      const exists = this.conferences.some(
+        (conference) => String(conference.id) === String(id),
+      );
+
+      this.conferences = exists
+        ? this.conferences.map((conference) =>
+            String(conference.id) === String(id)
+              ? normalizedConference
+              : conference,
+          )
+        : [...this.conferences, normalizedConference];
+      this.hydrateEmbeddedApplications();
+      return normalizedConference;
+    },
+
+    async loadApplicationsForConferences(ids = []) {
+      if (!isApiConfigured()) {
+        this.hydrateEmbeddedApplications();
+        return this.applicationsByConferenceId;
+      }
+
+      this.isLoadingApplications = true;
+      try {
+        this.hydrateEmbeddedApplications();
+        this.hydrateProfileApplications(useAuthStore().user);
+        return this.applicationsByConferenceId;
+      } finally {
+        this.isLoadingApplications = false;
+      }
     },
 
     async deleteConference(id) {
       if (isApiConfigured()) {
-        await apiRequestJSON(`/api/conferences/${id}`, { method: "DELETE" });
+        await apiRequestJSON(`/conferences/${id}`, { method: "DELETE" });
         this.conferences = this.conferences.filter((conf) => conf.id !== id);
         return true;
       }
@@ -111,15 +344,15 @@ export const useConferenceStore = defineStore("conference", {
 
     async updateConference(id, updatedConference) {
       if (isApiConfigured()) {
-        const response = await apiRequestJSON(`/api/conferences/${id}`, {
-          method: "PUT",
+        const response = await apiRequestJSON(`/conferences/${id}`, {
+          method: "PATCH",
           body: toConferencePayload(updatedConference),
         });
         const normalizedConference = normalizeConferenceRecord(
-          response?.data || response,
+          response?.data || response?.conference || response,
         );
         this.conferences = this.conferences.map((conf) =>
-          conf.id === id ? normalizedConference : conf,
+          String(conf.id) === String(id) ? normalizedConference : conf,
         );
         return normalizedConference;
       }
@@ -139,7 +372,7 @@ export const useConferenceStore = defineStore("conference", {
 
     async bookConference(id, booking) {
       if (isApiConfigured()) {
-        const response = await apiRequestJSON(`/api/conferences/${id}/book`, {
+        const response = await apiRequestJSON(`/conferences/${id}/book`, {
           method: "POST",
           body: booking,
         });
@@ -192,7 +425,7 @@ export const useConferenceStore = defineStore("conference", {
 
         if (!booking?.id) return false;
 
-        await apiRequestJSON(`/api/conferences/${id}/bookings/${booking.id}`, {
+        await apiRequestJSON(`/conferences/${id}/bookings/${booking.id}`, {
           method: "DELETE",
         });
         await this.loadConferences();

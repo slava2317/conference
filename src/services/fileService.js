@@ -11,12 +11,27 @@ function prefersNewerFile(existingFile, nextFile) {
   return true;
 }
 
+function getFileIdentity(file) {
+  return file?.id || file?.contentId || file?.file_id || null;
+}
+
 function normalizeFiles(files) {
   const normalized = [];
+  const indexById = new Map();
 
   files.forEach((file) => {
-    const index = normalized.findIndex((item) => item.name === file.name);
-    if (index === -1) {
+    if (!file) return;
+
+    const fileId = getFileIdentity(file);
+    if (!fileId) {
+      normalized.push(file);
+      return;
+    }
+
+    const key = String(fileId);
+    const index = indexById.get(key);
+    if (index === undefined) {
+      indexById.set(key, normalized.length);
       normalized.push(file);
       return;
     }
@@ -36,6 +51,26 @@ export function saveFiles(userEmail, files) {
     : [];
   storage[userEmail] = normalizeFiles([...existingFiles, ...files]);
   setJSON("files", storage);
+}
+
+export function getFileById(userEmail, fileId) {
+  const storage = getJSON("files", {});
+  const files = normalizeFiles(storage[userEmail] || []);
+  storage[userEmail] = files;
+  setJSON("files", storage);
+  return (
+    files.find((file) => String(getFileIdentity(file)) === String(fileId)) ||
+    null
+  );
+}
+
+export function getAnyFileById(fileId) {
+  const storage = getJSON("files", {});
+  const files = normalizeFiles(Object.values(storage).flat());
+  return (
+    files.find((file) => String(getFileIdentity(file)) === String(fileId)) ||
+    null
+  );
 }
 
 export function getFileByName(userEmail, fileName) {
@@ -62,10 +97,21 @@ export function getUserFiles(userEmail) {
   return files;
 }
 
-export function deleteFile(userEmail, fileName) {
+export function deleteFile(userEmail, fileOrName) {
   const storage = getJSON("files", {});
   if (storage[userEmail]) {
-    storage[userEmail] = storage[userEmail].filter((f) => f.name !== fileName);
+    const fileId =
+      typeof fileOrName === "object" ? getFileIdentity(fileOrName) : null;
+    const fileName =
+      typeof fileOrName === "string" ? fileOrName : fileOrName?.name;
+
+    storage[userEmail] = storage[userEmail].filter((file) => {
+      if (fileId) {
+        return String(getFileIdentity(file)) !== String(fileId);
+      }
+
+      return file.name !== fileName;
+    });
     setJSON("files", storage);
   }
 }

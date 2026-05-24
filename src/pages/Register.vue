@@ -1,67 +1,15 @@
 <template>
-  <div
-    style="
-      min-height: calc(100vh - 140px);
-      background-color: var(--background-color);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 40px 15px;
-    "
-  >
-    <div
-      style="
-        max-width: 450px;
-        width: 100%;
-        background-color: var(--card-background-color);
-        border-radius: 16px;
-        padding: 40px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-        border: 1px solid var(--border-color);
-      "
-    >
-      <h1
-        style="
-          font-family: &quot;Poppins&quot;, sans-serif;
-          font-size: 2rem;
-          font-weight: 700;
-          color: var(--text-color);
-          text-align: center;
-          margin: 0 0 10px 0;
-        "
-      >
-        Создать аккаунт
-      </h1>
-      <p
-        style="
-          font-family: &quot;Roboto&quot;, sans-serif;
-          color: var(--light-text-color);
-          text-align: center;
-          margin: 0 0 30px 0;
-          font-size: 0.95rem;
-        "
-      >
+  <div class="auth-page">
+    <div class="auth-card">
+      <h1 class="auth-title">Создать аккаунт</h1>
+      <p class="auth-subtitle">
         Присоединитесь к нашему сообществу и откройте новые возможности
       </p>
 
-      <form
-        @submit.prevent="register"
-        style="display: flex; flex-direction: column; gap: 16px"
-      >
+      <form @submit.prevent="register" class="auth-form">
         <!-- Имя -->
         <div>
-          <label
-            style="
-              display: block;
-              font-family: &quot;Roboto&quot;, sans-serif;
-              font-size: 0.85rem;
-              font-weight: 500;
-              color: var(--text-color);
-              margin-bottom: 6px;
-            "
-          >
-            👤 Имя
-          </label>
+          <label class="auth-label"> 👤 Имя </label>
           <input
             v-model="firstName"
             type="text"
@@ -72,18 +20,7 @@
 
         <!-- Фамилия -->
         <div>
-          <label
-            style="
-              display: block;
-              font-family: &quot;Roboto&quot;, sans-serif;
-              font-size: 0.85rem;
-              font-weight: 500;
-              color: var(--text-color);
-              margin-bottom: 6px;
-            "
-          >
-            👤 Фамилия
-          </label>
+          <label class="auth-label"> 👤 Фамилия </label>
           <input
             v-model="lastName"
             type="text"
@@ -94,40 +31,20 @@
 
         <!-- Email -->
         <div>
-          <label
-            style="
-              display: block;
-              font-family: &quot;Roboto&quot;, sans-serif;
-              font-size: 0.85rem;
-              font-weight: 500;
-              color: var(--text-color);
-              margin-bottom: 6px;
-            "
-          >
-            📧 Email
-          </label>
+          <label class="auth-label"> 📧 Email </label>
           <input
             v-model="email"
             type="email"
             placeholder="your@email.com"
             class="auth-input"
+            @input="emailError = ''"
           />
+          <p v-if="emailError" class="auth-field-error">{{ emailError }}</p>
         </div>
 
         <!-- Пароль -->
         <div>
-          <label
-            style="
-              display: block;
-              font-family: &quot;Roboto&quot;, sans-serif;
-              font-size: 0.85rem;
-              font-weight: 500;
-              color: var(--text-color);
-              margin-bottom: 6px;
-            "
-          >
-            🔐 Пароль
-          </label>
+          <label class="auth-label"> 🔐 Пароль </label>
           <div class="password-field" :data-password-tip="PASSWORD_HINT">
             <input
               v-model="password"
@@ -139,19 +56,13 @@
         </div>
 
         <!-- Кнопка регистрации -->
-        <button type="submit" class="auth-button">✨ Создать аккаунт</button>
+        <button type="submit" class="auth-button" :disabled="isSubmitting">
+          {{ isSubmitting ? "Создаем..." : "✨ Создать аккаунт" }}
+        </button>
       </form>
 
       <!-- Ссылка на вход -->
-      <p
-        style="
-          text-align: center;
-          margin-top: 20px;
-          font-family: &quot;Roboto&quot;, sans-serif;
-          color: var(--light-text-color);
-          font-size: 0.9rem;
-        "
-      >
+      <p class="auth-footer">
         Уже есть аккаунт?
         <router-link to="/login" class="auth-link"> Войти здесь </router-link>
       </p>
@@ -165,19 +76,25 @@ import { useRouter } from "vue-router";
 import { useAuthStore } from "../stores/authStore";
 import { showToast } from "../services/notificationService";
 import { PASSWORD_HINT, validatePassword } from "../services/passwordService";
+import { getApiErrorMessage } from "../services/apiErrorService";
 
 const firstName = ref("");
 const lastName = ref("");
 const email = ref("");
 const password = ref("");
+const isSubmitting = ref(false);
+const emailError = ref("");
 const auth = useAuthStore();
 const router = useRouter();
 
 async function register() {
+  if (isSubmitting.value) return;
+
   const firstNameValue = firstName.value.trim();
   const lastNameValue = lastName.value.trim();
   const emailValue = email.value.trim();
   const passwordValue = password.value;
+  emailError.value = "";
 
   if (!firstNameValue || !lastNameValue || !emailValue || !passwordValue) {
     showToast("Заполните все поля");
@@ -196,23 +113,88 @@ async function register() {
     return;
   }
 
-  const success = await auth.register(
-    firstNameValue,
-    lastNameValue,
-    emailValue,
-    passwordValue,
-  );
-  if (!success) {
-    showToast("Пользователь с таким email уже зарегистрирован");
-    return;
-  }
+  try {
+    isSubmitting.value = true;
+    const success = await auth.register(
+      firstNameValue,
+      lastNameValue,
+      emailValue,
+      passwordValue,
+    );
+    if (!success) {
+      emailError.value = "Пользователь с такой почтой уже зарегистрирован";
+      return;
+    }
 
-  showToast("Регистрация успешна");
-  router.push("/login");
+    showToast("Регистрация успешна");
+    router.push("/login");
+  } catch (error) {
+    const status = Number(error?.status || error?.response?.status || 0);
+    if (status === 409) {
+      emailError.value = "Пользователь с такой почтой уже зарегистрирован";
+      return;
+    }
+
+    showToast(getApiErrorMessage(error, "Не удалось зарегистрировать аккаунт"));
+    console.error("register error:", error);
+  } finally {
+    isSubmitting.value = false;
+  }
 }
 </script>
 
 <style scoped>
+.auth-page {
+  min-height: calc(100vh - 140px);
+  background-color: var(--background-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 15px;
+}
+
+.auth-card {
+  max-width: 450px;
+  width: 100%;
+  background-color: var(--card-background-color);
+  border-radius: 16px;
+  padding: 40px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--border-color);
+}
+
+.auth-title {
+  font-family: "Poppins", sans-serif;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-color);
+  text-align: center;
+  margin: 0 0 10px;
+}
+
+.auth-subtitle {
+  font-family: "Roboto", sans-serif;
+  color: var(--light-text-color);
+  text-align: center;
+  margin: 0 0 30px;
+  font-size: 0.95rem;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-label {
+  display: block;
+  font-family: "Roboto", sans-serif;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-color);
+  margin-bottom: 6px;
+}
+
 .auth-input {
   width: 100%;
   padding: 12px 14px;
@@ -256,6 +238,21 @@ async function register() {
   transform: translateY(0);
 }
 
+.auth-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+  transform: none;
+  box-shadow: none;
+}
+
+.auth-footer {
+  text-align: center;
+  margin-top: 20px;
+  font-family: "Roboto", sans-serif;
+  color: var(--light-text-color);
+  font-size: 0.9rem;
+}
+
 .auth-link {
   color: var(--primary-color);
   text-decoration: none;
@@ -266,5 +263,12 @@ async function register() {
 
 .auth-link:hover {
   color: var(--secondary-color);
+}
+
+.auth-field-error {
+  margin: 6px 0 0;
+  font-family: "Roboto", sans-serif;
+  font-size: 0.85rem;
+  color: #d34b4b;
 }
 </style>
